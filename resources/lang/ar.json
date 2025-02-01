@@ -1,0 +1,12 @@
+{
+    "previous" : "&laquo; السابق",
+    "next" : "التالي &raquo;",
+    "showing" : "عرض",
+    "to" : "إلى",
+    "of" : "من أصل",
+    "Showing": "إظهار",
+    "results": "نتائج",
+    "showing_entries" : "عرض :first إلى :last من أصل :total نتائج",
+   "pagination.next":"التالي",
+   "pagination.previous":"السابق"
+ }

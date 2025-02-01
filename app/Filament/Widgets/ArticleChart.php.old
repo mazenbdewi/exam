@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Filament\Widgets;
+
+use Carbon\Carbon;
+use Filament\Widgets\ChartWidget;
+use Illuminate\Support\Facades\DB;
+
+class ArticleChart extends ChartWidget
+{
+    protected static ?string $heading = 'المقالات المنشورة';
+
+    protected static string $color = 'info';
+
+    protected function getData(): array
+    {
+        // استعلام للحصول على عدد المقالات المنشورة لكل شهر في السنة الحالية
+        $articlesPerMonth = DB::table('articles')
+            ->select(DB::raw('MONTH(published_at) as month'), DB::raw('COUNT(*) as article_count'))
+            ->whereYear('published_at', Carbon::now()->year)
+            ->where('is_published', 1) // شرط للتحقق من نشر المقالات فقط
+            ->groupBy(DB::raw('MONTH(published_at)'))
+            ->orderBy('month')
+            ->get();
+
+        // تجهيز البيانات لتكون جاهزة للعرض في الـ widget
+        $labels = [];
+        $data = [];
+
+        foreach ($articlesPerMonth as $entry) {
+            // تحويل أرقام الشهور إلى أسماء الشهور
+            $labels[] = Carbon::create()->month($entry->month)->format('F');
+            $data[] = $entry->article_count;
+        }
+
+        return [
+            'datasets' => [
+                [
+                    'label' => 'عدد المقالات المنشورة',
+                    'data' => $data,
+                ],
+            ],
+            'labels' => $labels,
+        ];
+    }
+
+    protected function getType(): string
+    {
+        return 'bar';
+    }
+}

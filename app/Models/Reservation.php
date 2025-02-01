@@ -1,0 +1,38 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Reservation extends Model
+{
+    use HasFactory;
+
+    protected $table = 'reservations';
+
+    protected $primaryKey = 'reservation_id';
+
+    protected $fillable = [
+        'schedule_id',
+        'room_id',
+        'capacity_mode',
+        'used_capacity',
+        'date',
+        'time_slot',
+    ];
+
+    const CREATED_AT = 'reservation_created_at';
+
+    const UPDATED_AT = 'reservation_updated_at';
+
+    public function schedule()
+    {
+        return $this->belongsTo(Schedule::class, 'schedule_id', 'schedule_id');
+    }
+
+    public function room()
+    {
+        return $this->belongsTo(Room::class, 'room_id', 'room_id');
+    }
+}
