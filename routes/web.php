@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Route;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
-Route::redirect('/', '/adminpanel', 301);
+Route::redirect('/', '/adminpanel');
 // Route::get('/', function () {
 //     return view('welcome');
 // });
