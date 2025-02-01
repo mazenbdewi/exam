@@ -82,11 +82,8 @@ return new class extends Migration
             $table->unsignedBigInteger($columnNames['model_morph_key']);
             $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_roles_model_id_model_type_index');
 
-            // $table->foreign($pivotRole)
-            //     ->references('id') // role id
-            //     ->on($tableNames['roles'])
-            $table->foreign('role_id') // اسم العمود كسلسلة نصية
-                ->references('id')
+            $table->foreign($pivotRole)
+                ->references('id') // role id
                 ->on($tableNames['roles'])
                 ->onDelete('cascade');
             if ($teams) {
