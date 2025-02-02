@@ -89,8 +89,8 @@ class User extends Authenticatable
 
     public function roles()
     {
-        return $this->belongsToMany(Role::class, 'model_has_roles', 'model_id', 'role_id')
-            ->where('model_type', User::class); // تأكد من أن model_type هو User
+        return $this->belongsToMany(Role::class, 'model_has_roles', 'model_id', 'role_id');
+        // ->where('model_type', User::class); // تأكد من أن model_type هو User
     }
 
     public function observers()
