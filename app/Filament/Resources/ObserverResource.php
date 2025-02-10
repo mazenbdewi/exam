@@ -415,19 +415,32 @@ class ObserverResource extends Resource
                     continue;
                 }
 
-                // توزيع المراقبين بناءً على الدور
+                // توزيع المراقبين بناءً على الدور مع الأولوية للرئيس ثم الأمين ثم المراقب
                 $role = $user->getRoleNames()->first();
                 $assigned = false;
 
-                if ($role === 'مراقب' && $observersAssigned < $maxObservers) {
+                // الأولوية لرئيس القاعة
+                if ($role === 'رئيس_قاعة' && $headsAssigned < $maxHeads) {
                     $assigned = self::assignObserver($user, $schedule, $room);
-                    $observersAssigned++;
-                } elseif ($role === 'امين_سر' && $secretariesAssigned < $maxSecretaries) {
+                    if ($assigned) {
+                        $headsAssigned++;
+                    }
+                }
+
+                // ثم أمين السر
+                elseif ($role === 'امين_سر' && $secretariesAssigned < $maxSecretaries) {
                     $assigned = self::assignObserver($user, $schedule, $room);
-                    $secretariesAssigned++;
-                } elseif ($role === 'رئيس_قاعة' && $headsAssigned < $maxHeads) {
+                    if ($assigned) {
+                        $secretariesAssigned++;
+                    }
+                }
+
+                // ثم المراقبين العاديين
+                elseif ($role === 'مراقب' && $observersAssigned < $maxObservers) {
                     $assigned = self::assignObserver($user, $schedule, $room);
-                    $headsAssigned++;
+                    if ($assigned) {
+                        $observersAssigned++;
+                    }
                 }
 
                 if ($assigned) {
@@ -435,7 +448,10 @@ class ObserverResource extends Resource
                     unset($usersWithoutObservers[$userKey]);
                 }
 
-                if ($observersAssigned >= $maxObservers && $secretariesAssigned >= $maxSecretaries && $headsAssigned >= $maxHeads) {
+                // التوقف إذا اكتملت جميع الأدوار
+                if ($headsAssigned >= $maxHeads
+                    && $secretariesAssigned >= $maxSecretaries
+                    && $observersAssigned >= $maxObservers) {
                     break;
                 }
             }
@@ -452,7 +468,7 @@ class ObserverResource extends Resource
         if ($totalObserversAssigned > 0) {
             Notification::make()
                 ->title('تم التوزيع بنجاح')
-                ->body('تم توزيع المراقبين على  القاعات.')
+                ->body("تم توزيع $totalObserversAssigned مراقب على $totalRoomsAssigned قاعة")
                 ->success()
                 ->send();
         } else {
@@ -463,6 +479,8 @@ class ObserverResource extends Resource
                 ->send();
         }
     }
+
+    // باقي الدوال المساعدة تبقى كما هي
 
     // ---------------------------
     // Helper Methods (Static)
