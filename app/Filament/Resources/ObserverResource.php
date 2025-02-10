@@ -97,8 +97,11 @@ class ObserverResource extends Resource
                         // تحديد نوع القاعة بناءً على الفترة الزمنية
                         $roomType = $schedule->schedule_time_slot === 'morning' ? 'small' : 'big';
 
-                        // الحصول على جميع القاعات من النوع المطلوب
+                        // الحصول على القاعات المرتبطة بالجدول المحدد
                         return Room::where('room_type', $roomType)
+                            ->whereHas('schedules', function ($query) use ($schedule) {
+                                $query->where('schedule_id', $schedule->schedule_id);
+                            })
                             ->pluck('room_name', 'room_id');
                     })
                     ->reactive()
