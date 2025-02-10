@@ -70,6 +70,21 @@ class ObserverResource extends Resource
                     ->visible(fn (callable $get) => $get('schedule_id') !== null),
 
                 // حقل اختيار القاعة
+                // Forms\Components\Select::make('room_id')
+                //     ->label('القاعة')
+                //     ->required()
+                //     ->options(function (callable $get) {
+                //         $schedule = Schedule::find($get('schedule_id'));
+                //         if (! $schedule) {
+                //             return [];
+                //         }
+
+                //         return Room::where('room_type',
+                //             $schedule->schedule_time_slot === 'morning' ? 'small' : 'big'
+                //         )->pluck('room_name', 'room_id');
+                //     })
+                //     ->reactive()
+                //     ->visible(fn (callable $get) => $get('schedule_id') !== null),
                 Forms\Components\Select::make('room_id')
                     ->label('القاعة')
                     ->required()
@@ -79,9 +94,12 @@ class ObserverResource extends Resource
                             return [];
                         }
 
-                        return Room::where('room_type',
-                            $schedule->schedule_time_slot === 'morning' ? 'small' : 'big'
-                        )->pluck('room_name', 'room_id');
+                        // تحديد نوع القاعة بناءً على الفترة الزمنية
+                        $roomType = $schedule->schedule_time_slot === 'morning' ? 'small' : 'big';
+
+                        // الحصول على جميع القاعات من النوع المطلوب
+                        return Room::where('room_type', $roomType)
+                            ->pluck('room_name', 'room_id');
                     })
                     ->reactive()
                     ->visible(fn (callable $get) => $get('schedule_id') !== null),

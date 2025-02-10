@@ -50,4 +50,10 @@ class Room extends Model
     {
         return $this->hasMany(Reservation::class, 'room_id', 'room_id');
     }
+
+    // في موديل Room (App\Models\Room)
+    public function schedules()
+    {
+        return $this->belongsToMany(Schedule::class, 'room_schedules', 'room_id', 'schedule_id');
+    }
 }
