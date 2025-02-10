@@ -100,7 +100,7 @@ class ObserverResource extends Resource
                         // الحصول على القاعات المرتبطة بالجدول المحدد
                         return Room::where('room_type', $roomType)
                             ->whereHas('schedules', function ($query) use ($schedule) {
-                                $query->where('schedule_id', $schedule->schedule_id);
+                                $query->where('room_schedules.schedule_id', $schedule->schedule_id); // تحديد الجدول بوضوح
                             })
                             ->pluck('room_name', 'room_id');
                     })
