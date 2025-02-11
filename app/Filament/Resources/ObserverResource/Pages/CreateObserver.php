@@ -15,9 +15,23 @@ class CreateObserver extends CreateRecord
 
     protected function beforeCreate(): void
     {
+        $room = Room::find($this->data['room_id']);
+        if ($room) {
+            $currentObservers = Observer::where('room_id', $room->room_id)->count();
+            $maxObservers = $room->room_type === 'big' ? 11 : 6; // 11 للكبيرة، 6 للصغيرة
+
+            if ($currentObservers >= $maxObservers) {
+                Notification::make()
+                    ->title('خطأ')
+                    ->body('هذه القاعة ممتلئة بالكامل')
+                    ->danger()
+                    ->send();
+                $this->halt();
+            }
+        }
+
         $data = $this->data;
 
-        // 1. التحقق من التكرار
         if (Observer::where('user_id', $data['user_id'])
             ->where('schedule_id', $data['schedule_id'])
             ->exists()) {
@@ -29,7 +43,6 @@ class CreateObserver extends CreateRecord
             $this->halt();
         }
 
-        // 2. التحقق من الحد الأقصى للمراقبات
         $user = User::find($data['user_id']);
         if ($user && Observer::where('user_id', $data['user_id'])->count() >= $user->getMaxObserversByAge()) {
             Notification::make()
@@ -39,16 +52,35 @@ class CreateObserver extends CreateRecord
                 ->send();
             $this->halt();
         }
-
-        // 3. التحقق من سعة القاعة
+        $user = User::find($data['user_id']);
         $room = Room::find($data['room_id']);
-        if ($room) {
-            $current = Observer::where('room_id', $data['room_id'])->count();
-            $max = ($room->room_type === 'big') ? 8 : 4;
-            if ($current >= $max) {
+
+        if ($user && $room) {
+            $userRole = $user->getRoleNames()->first();
+
+            $maxAllowed = match ($userRole) {
+                'مراقب' => ($room->room_type === 'big') ? 8 : 4,
+                'امين_سر' => ($room->room_type === 'big') ? 2 : 1,
+                'رئيس_قاعة' => 1,
+                default => 0,
+            };
+
+            $currentCount = Observer::where('room_id', $room->room_id)
+                ->whereHas('user.roles', function ($query) use ($userRole) {
+                    $query->where('name', $userRole);
+                })->count();
+
+            if ($currentCount >= $maxAllowed) {
+                $roleName = match ($userRole) {
+                    'مراقب' => 'المراقبين',
+                    'امين_سر' => 'أمناء السر',
+                    'رئيس_قاعة' => 'رؤساء القاعات',
+                    default => 'هذا الدور'
+                };
+
                 Notification::make()
-                    ->title('🔴 خطأ في القاعة')
-                    ->body('القاعة ممتلئة ولا يوجد أماكن شاغرة')
+                    ->title('🔴 خطأ في التعيين')
+                    ->body("لا يمكن تعيين أكثر من $maxAllowed $roleName في هذه القاعة")
                     ->danger()
                     ->send();
                 $this->halt();
@@ -56,12 +88,12 @@ class CreateObserver extends CreateRecord
         }
     }
 
-    // protected function afterCreate(): void
-    // {
-    //     Notification::make()
-    //         ->title('✅ نجاح')
-    //         ->body('تم إضافة المراقب بنجاح')
-    //         ->success()
-    //         ->send();
-    // }
+    protected function afterCreate(): void
+    {
+        Notification::make()
+            ->title('✅ نجاح')
+            ->body('تم إضافة المراقب بنجاح')
+            ->success()
+            ->send();
+    }
 }

@@ -39,68 +39,27 @@ class Observer extends Model
         return $this->belongsTo(Room::class, 'room_id');
     }
 
-    // protected static function boot()
-    // {
-    //     parent::boot();
-
-    //     static::creating(function ($observer) {
-    //         // التحقق من أن المراقب لم يتم تعيينه مسبقًا لنفس المادة
-    //         $existingObserver = Observer::where('user_id', $observer->user_id)
-    //             ->where('schedule_id', $observer->schedule_id)
-    //             ->exists();
-    //         if ($existingObserver) {
-    //             Notification::make()
-    //                 ->title('خطأ')
-    //                 ->body('هذا المراقب تم تعيينه مسبقًا لهذه المادة.')
-    //                 ->danger()
-    //                 ->send();
-
-    //             // منع العملية
-    //             return false;
-    //         }
-
-    //         // التحقق من عدد المراقبات المسموح بها للمراقب
-    //         $user = User::find($observer->user_id);
-    //         if ($user) {
-    //             $maxObservers = $user->getMaxObserversByAge();
-    //             $currentObservers = Observer::where('user_id', $observer->user_id)->count();
-    //             if ($currentObservers >= $maxObservers) {
-    //                 Notification::make()
-    //                     ->title('خطأ')
-    //                     ->body('هذا المراقب قد تجاوز الحد الأقصى للمراقبات المسموح بها.')
-    //                     ->danger()
-    //                     ->send();
-
-    //                 // منع العملية
-    //                 return false;
-    //             }
-    //         }
-
-    //         // التحقق من سعة القاعة
-    //         $room = Room::find($observer->room_id);
-    //         if ($room) {
-    //             $currentObserversInRoom = Observer::where('room_id', $observer->room_id)->count();
-    //             $maxObserversInRoom = $room->room_type === 'big' ? 8 : 4;
-    //             if ($currentObserversInRoom >= $maxObserversInRoom) {
-    //                 Notification::make()
-    //                     ->title('خطأ')
-    //                     ->body('هذه القاعة ممتلئة بالمراقبين.')
-    //                     ->danger()
-    //                     ->send();
-
-    //                 // منع العملية
-    //                 return false;
-    //             }
-    //         }
-    //     });
-    // }
-
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($observer) {
-            // التحقق من أن المراقب لم يتم تعيينه مسبقًا لنفس المادة
+
+            $room = $observer->room;
+            if ($room) {
+                $currentObservers = Observer::where('room_id', $room->room_id)->count();
+                $maxObservers = $room->room_type === 'big' ? 11 : 6; // 11 للكبيرة، 6 للصغيرة
+
+                if ($currentObservers >= $maxObservers) {
+                    Notification::make()
+                        ->title('خطأ')
+                        ->body('هذه القاعة ممتلئة بالكامل')
+                        ->danger()
+                        ->send();
+
+                    return false;
+                }
+            }
             $existingObserver = Observer::where('user_id', $observer->user_id)
                 ->where('schedule_id', $observer->schedule_id)
                 ->exists();
@@ -111,11 +70,9 @@ class Observer extends Model
                     ->danger()
                     ->send();
 
-                // منع العملية
                 return false;
             }
 
-            // التحقق من عدد المراقبات المسموح بها للمراقب
             $user = User::find($observer->user_id);
             if ($user) {
                 $maxObservers = $user->getMaxObserversByAge();
@@ -127,29 +84,9 @@ class Observer extends Model
                         ->danger()
                         ->send();
 
-                    // منع العملية
                     return false;
                 }
             }
-
-            // التحقق من سعة القاعة
-            $room = Room::find($observer->room_id);
-            if ($room) {
-                $currentObserversInRoom = Observer::where('room_id', $observer->room_id)->count();
-                $maxObserversInRoom = $room->room_type === 'big' ? 8 : 4;
-                if ($currentObserversInRoom >= $maxObserversInRoom) {
-                    Notification::make()
-                        ->title('خطأ')
-                        ->body('هذه القاعة ممتلئة بالمراقبين.')
-                        ->danger()
-                        ->send();
-
-                    // منع العملية
-                    return false;
-                }
-            }
-
-            // التحقق من تعارض الجداول الزمنية
             $schedule = Schedule::find($observer->schedule_id);
             if ($schedule) {
                 $conflictingObservers = Observer::where('user_id', $observer->user_id)
@@ -165,7 +102,6 @@ class Observer extends Model
                         ->danger()
                         ->send();
 
-                    // منع العملية
                     return false;
                 }
             }

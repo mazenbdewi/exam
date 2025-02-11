@@ -53,13 +53,11 @@ class ObserverResource extends Resource
                         }
                     }),
 
-                // تاريخ الامتحان (عرض فقط)
                 Forms\Components\DatePicker::make('schedule_exam_date')
                     ->label('تاريخ الامتحان')
                     ->disabled()
                     ->visible(fn (callable $get) => $get('schedule_id') !== null),
 
-                // الفترة الزمنية (عرض فقط)
                 Forms\Components\Select::make('schedule_time_slot')
                     ->label('الفترة')
                     ->options([
@@ -68,23 +66,6 @@ class ObserverResource extends Resource
                     ])
                     ->disabled()
                     ->visible(fn (callable $get) => $get('schedule_id') !== null),
-
-                // حقل اختيار القاعة
-                // Forms\Components\Select::make('room_id')
-                //     ->label('القاعة')
-                //     ->required()
-                //     ->options(function (callable $get) {
-                //         $schedule = Schedule::find($get('schedule_id'));
-                //         if (! $schedule) {
-                //             return [];
-                //         }
-
-                //         return Room::where('room_type',
-                //             $schedule->schedule_time_slot === 'morning' ? 'small' : 'big'
-                //         )->pluck('room_name', 'room_id');
-                //     })
-                //     ->reactive()
-                //     ->visible(fn (callable $get) => $get('schedule_id') !== null),
                 Forms\Components\Select::make('room_id')
                     ->label('القاعة')
                     ->required()
@@ -94,15 +75,13 @@ class ObserverResource extends Resource
                             return [];
                         }
 
-                        // تحديد نوع القاعة بناءً على الفترة الزمنية
                         $roomType = $schedule->schedule_time_slot === 'morning' ? 'small' : 'big';
 
-                        // الحصول على القاعات المرتبطة بالجدول المحدد
-                        return Room::where('room_type', $roomType)
-                            ->whereHas('schedules', function ($query) use ($schedule) {
-                                $query->where('room_schedules.schedule_id', $schedule->schedule_id); // تحديد الجدول بوضوح
-                            })
+                        return Room::whereHas('schedules', function ($query) use ($schedule) {
+                            $query->where('room_schedules.schedule_id', $schedule->schedule_id); // تحديد الجدول بوضوح
+                        })
                             ->pluck('room_name', 'room_id');
+
                     })
                     ->reactive()
                     ->visible(fn (callable $get) => $get('schedule_id') !== null),
@@ -125,7 +104,6 @@ class ObserverResource extends Resource
                             $max = $user->getMaxObserversByAge();
                             $current = Observer::where('user_id', $state)->count();
                             if ($current >= $max) {
-                                // تعيين قيمة افتراضية بدلاً من null
                                 $set('user_id', auth()->user()->id);
                             }
                         }
@@ -142,7 +120,6 @@ class ObserverResource extends Resource
                                 $max = $user->getMaxObserversByAge();
                                 $current = Observer::where('user_id', $state)->count();
                                 if ($current >= $max) {
-                                    // تعيين قيمة افتراضية بدلاً من null
                                     $set('user_id', auth()->user()->id);
                                 }
                             }
@@ -156,7 +133,8 @@ class ObserverResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('user.name')->label('المراقب'),
+                Tables\Columns\TextColumn::make('user.name')->label('الاسم'),
+                Tables\Columns\TextColumn::make('user.roles.name')->label('نوع المراقبة'),
                 Tables\Columns\TextColumn::make('schedule.schedule_subject')->label('المادة'),
                 Tables\Columns\TextColumn::make('schedule.schedule_exam_date')->label('تاريخ الامتحان'),
                 Tables\Columns\TextColumn::make('schedule.schedule_time_slot')
@@ -170,20 +148,12 @@ class ObserverResource extends Resource
                     }),
                 Tables\Columns\TextColumn::make('room.room_name')->label('القاعة'),
             ])->modifyQueryUsing(function (Builder $query) {
-                // إذا كان المستخدم super_admin، لا تطبق أي تصفية
                 if (auth()->user()->hasRole('super_admin')) {
                     return $query;
                 }
 
-                // إذا لم يكن super_admin، تطبق تصفية لعرض المواد المسجلة فقط باسم المستخدم الحالي
                 return $query->where('user_id', auth()->user()->id);
             })
-            // ->filters([
-            //     SelectFilter::make('user_id')
-            //         ->label('المراقب')
-            //         ->searchable()
-            //         ->options(fn () => User::pluck('name', 'id')->toArray()),
-            // ])
             ->filters([
                 SelectFilter::make('user_id')
                     ->label('المراقب')
@@ -196,7 +166,7 @@ class ObserverResource extends Resource
             ])
             ->modifyQueryUsing(function ($query) {
                 if (in_array(auth()->user()->role, ['مراقب', 'امين_سر', 'رئيس_قاعة'])) {
-                    $query->where('user_id', auth()->id()); // تصفية الجدول ليعرض فقط سجلات المستخدم الحالي
+                    $query->where('user_id', auth()->id());
                 }
             })
 
@@ -217,15 +187,12 @@ class ObserverResource extends Resource
                     ->icon('heroicon-o-arrow-down-tray')
                     ->color('success')
                     ->action(function ($livewire) {
-                        // الحصول على الاستعلام الالإعدادات
                         $baseQuery = static::getEloquentQuery()
                             ->with(['user', 'schedule', 'room'])
                             ->when(
                                 ! auth()->user()->hasRole('super_admin'),
                                 fn ($query) => $query->where('user_id', auth()->id())
                             );
-
-                        // تطبيق الفلترات بشكل صحيح
                         foreach ($livewire->tableFilters as $filterName => $value) {
                             if (! empty($value)) {
                                 $filter = $livewire->getTable()->getFilter($filterName);
@@ -284,249 +251,156 @@ class ObserverResource extends Resource
         ];
     }
 
-    // public static function distributeObservers()
-    // {
-    //     // الحصول على جميع المراقبين الذين لم يختاروا مراقباتهم بعد
-    //     $usersWithoutObservers = User::whereDoesntHave('observers')
-    //         ->whereHas('roles', function ($query) {
-    //             $query->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']);
-    //         })
-    //         ->get();
-
-    //     // الحصول على جميع الجداول التي لم يتم تعيين مراقبين لها بعد
-    //     $schedulesWithoutObservers = Schedule::with('rooms')
-    //         ->whereDoesntHave('observers')
-    //         ->whereHas('rooms') // تأكد من أن الجدول مرتبط بقاعة واحدة على الأقل
-    //         ->get();
-
-    //     // متغيرات لتتبع النتيجة
-    //     $totalObserversAssigned = 0;
-    //     $totalRoomsAssigned = 0;
-
-    //     foreach ($schedulesWithoutObservers as $scheduleKey => $schedule) {
-    //         $room = $schedule->rooms()->first(); // الحصول على أول room مرتبط
-
-    //         if (! $room) {
-    //             continue; // تخطى هذا الجدول إذا لم يكن مرتبطًا بأي قاعة
-    //         }
-
-    //         // تحديد عدد المراقبين بناءً على نوع القاعة
-    //         $maxObservers = $room->room_type === 'big' ? 8 : 4;
-    //         $maxSecretaries = $room->room_type === 'big' ? 2 : 1;
-    //         $maxHeads = 1;
-
-    //         // توزيع المراقبين
-    //         $observersAssigned = 0;
-    //         $secretariesAssigned = 0;
-    //         $headsAssigned = 0;
-
-    //         foreach ($usersWithoutObservers as $userKey => $user) {
-    //             $maxObserversByAge = $user->getMaxObserversByAge();
-    //             $currentObserversCount = Observer::where('user_id', $user->id)->count();
-
-    //             // إذا تجاوز المستخدم الحد الأقصى، تخطاه
-    //             if ($currentObserversCount >= $maxObserversByAge) {
-    //                 continue;
-    //             }
-
-    //             // توزيع المراقبين بناءً على الدور
-    //             if ($user->hasRole('مراقب') && $observersAssigned < $maxObservers) {
-    //                 Observer::create([
-    //                     'user_id' => $user->id,
-    //                     'schedule_id' => $schedule->schedule_id,
-    //                     'room_id' => $room->room_id,
-    //                 ]);
-    //                 $observersAssigned++;
-    //                 $totalObserversAssigned++;
-
-    //                 // إزالة المستخدم من القائمة بعد تعيينه
-    //                 unset($usersWithoutObservers[$userKey]);
-    //             } elseif ($user->hasRole('امين_سر') && $secretariesAssigned < $maxSecretaries) {
-    //                 Observer::create([
-    //                     'user_id' => $user->id,
-    //                     'schedule_id' => $schedule->schedule_id,
-    //                     'room_id' => $room->room_id,
-    //                 ]);
-    //                 $secretariesAssigned++;
-    //                 $totalObserversAssigned++;
-
-    //                 // إزالة المستخدم من القائمة بعد تعيينه
-    //                 unset($usersWithoutObservers[$userKey]);
-    //             } elseif ($user->hasRole('رئيس_قاعة') && $headsAssigned < $maxHeads) {
-    //                 Observer::create([
-    //                     'user_id' => $user->id,
-    //                     'schedule_id' => $schedule->schedule_id,
-    //                     'room_id' => $room->room_id,
-    //                 ]);
-    //                 $headsAssigned++;
-    //                 $totalObserversAssigned++;
-
-    //                 // إزالة المستخدم من القائمة بعد تعيينه
-    //                 unset($usersWithoutObservers[$userKey]);
-    //             }
-    //         }
-
-    //         if ($observersAssigned > 0 || $secretariesAssigned > 0 || $headsAssigned > 0) {
-    //             $totalRoomsAssigned++;
-    //         }
-
-    //         // إعادة تحميل البيانات بعد التعديلات
-    //         $usersWithoutObservers = $usersWithoutObservers->values();
-    //         $schedulesWithoutObservers = $schedulesWithoutObservers->values();
-    //     }
-
-    //     // إظهار رسالة تنبيه بناءً على النتيجة
-    //     if ($totalObserversAssigned > 0) {
-    //         Notification::make()
-    //             ->title('تم التوزيع بنجاح')
-    //             ->body('تم توزيع المراقبين على القاعات')
-    //             ->success()
-    //             ->send();
-    //     } else {
-    //         Notification::make()
-    //             ->title('لم يتم التوزيع')
-    //             ->body('لم يتم توزيع أي مراقبين.')
-    //             ->warning()
-    //             ->send();
-    //     }
-    // }
-
     public static function distributeObservers()
     {
-        // الحصول على جميع المراقبين الذين لم يختاروا مراقباتهم بعد
-        $usersWithoutObservers = User::whereDoesntHave('observers')
-            ->whereHas('roles', function ($query) {
-                $query->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']);
-            })
-            ->get();
+        $eligibleUsers = User::whereHas('roles', function ($query) {
+            $query->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']);
+        })
+            ->get()
+            ->filter(function ($user) {
+                return Observer::where('user_id', $user->id)->count() < $user->getMaxObserversByAge();
+            });
 
-        // الحصول على جميع الجداول التي لم يتم تعيين مراقبين لها بعد
-        $schedulesWithoutObservers = Schedule::with('rooms')
-            ->whereDoesntHave('observers')
-            ->whereHas('rooms') // تأكد من أن الجدول مرتبط بقاعة واحدة على الأقل
-            ->get();
-
-        // متغيرات لتتبع النتيجة
+        $schedules = Schedule::with('rooms')->whereHas('rooms')->get();
         $totalObserversAssigned = 0;
         $totalRoomsAssigned = 0;
 
-        foreach ($schedulesWithoutObservers as $schedule) {
-            $room = $schedule->rooms()->first(); // الحصول على أول room مرتبط
+        foreach ($schedules as $schedule) {
+            foreach ($schedule->rooms as $room) {
 
-            if (! $room) {
-                continue; // تخطى هذا الجدول إذا لم يكن مرتبطًا بأي قاعة
-            }
+                $existingObservers = Observer::where('room_id', $room->room_id)->get();
 
-            // تحديد عدد المراقبين بناءً على نوع القاعة
-            $maxObservers = $room->room_type === 'big' ? 8 : 4;
-            $maxSecretaries = $room->room_type === 'big' ? 2 : 1;
-            $maxHeads = 1;
+                // احتساب الأدوار الحالية
+                $currentRoles = [
+                    'رئيس_قاعة' => $existingObservers->filter(fn ($obs) => $obs->user->hasRole('رئيس_قاعة'))->count(),
+                    'امين_سر' => $existingObservers->filter(fn ($obs) => $obs->user->hasRole('امين_سر'))->count(),
+                    'مراقب' => $existingObservers->filter(fn ($obs) => $obs->user->hasRole('مراقب'))->count(),
+                ];
 
-            // توزيع المراقبين
-            $observersAssigned = 0;
-            $secretariesAssigned = 0;
-            $headsAssigned = 0;
+                // تحديد الأعداد المطلوبة مع احتساب الحاليين
+                $roomType = $room->room_type;
+                $maxHeads = 1 - $currentRoles['رئيس_قاعة'];
+                $maxSecretaries = ($roomType === 'big' ? 2 : 1) - $currentRoles['امين_سر'];
+                $maxObservers = ($roomType === 'big' ? 8 : 4) - $currentRoles['مراقب'];
+                $roomType = $room->room_type;
 
-            foreach ($usersWithoutObservers as $userKey => $user) {
-                $maxObserversByAge = $user->getMaxObserversByAge();
-                $currentObserversCount = Observer::where('user_id', $user->id)->count();
+                $maxHeads = 1;
+                $maxSecretaries = ($roomType === 'big') ? 2 : 1;
+                $maxObservers = ($roomType === 'big') ? 8 : 4;
 
-                // إذا تجاوز المستخدم الحد الأقصى، تخطاه
-                if ($currentObserversCount >= $maxObserversByAge) {
-                    continue;
-                }
+                $assignedRoles = [
+                    'رئيس_قاعة' => 0,
+                    'امين_سر' => 0,
+                    'مراقب' => 0,
+                ];
 
-                // توزيع المراقبين بناءً على الدور مع الأولوية للرئيس ثم الأمين ثم المراقب
-                $role = $user->getRoleNames()->first();
-                $assigned = false;
+                foreach ($eligibleUsers as $key => $user) {
+                    if ($assignedRoles['رئيس_قاعة'] >= $maxHeads) {
+                        break;
+                    }
 
-                // الأولوية لرئيس القاعة
-                if ($role === 'رئيس_قاعة' && $headsAssigned < $maxHeads) {
-                    $assigned = self::assignObserver($user, $schedule, $room);
-                    if ($assigned) {
-                        $headsAssigned++;
+                    $role = $user->getRoleNames()->first();
+                    if ($role === 'رئيس_قاعة') {
+                        $hasConflict = Observer::where('user_id', $user->id)
+                            ->whereHas('schedule', function ($query) use ($schedule) {
+                                $query->where('schedule_exam_date', $schedule->schedule_exam_date)
+                                    ->where('schedule_time_slot', $schedule->schedule_time_slot);
+                            })->exists();
+
+                        if (! $hasConflict) {
+                            $assigned = self::assignObserver($user, $schedule, $room);
+                            if ($assigned) {
+                                $assignedRoles['رئيس_قاعة']++;
+                                $totalObserversAssigned++;
+                                unset($eligibleUsers[$key]);
+                            }
+                        }
                     }
                 }
 
-                // ثم أمين السر
-                elseif ($role === 'امين_سر' && $secretariesAssigned < $maxSecretaries) {
-                    $assigned = self::assignObserver($user, $schedule, $room);
-                    if ($assigned) {
-                        $secretariesAssigned++;
+                // --- تعيين أمناء السر ---
+                foreach ($eligibleUsers as $key => $user) {
+                    if ($assignedRoles['امين_سر'] >= $maxSecretaries) {
+                        break;
+                    }
+
+                    $role = $user->getRoleNames()->first();
+                    if ($role === 'امين_سر') {
+                        // التحقق من التعارض في الوقت
+                        $hasConflict = Observer::where('user_id', $user->id)
+                            ->whereHas('schedule', function ($query) use ($schedule) {
+                                $query->where('schedule_exam_date', $schedule->schedule_exam_date)
+                                    ->where('schedule_time_slot', $schedule->schedule_time_slot);
+                            })->exists();
+
+                        if (! $hasConflict) {
+                            $assigned = self::assignObserver($user, $schedule, $room);
+                            if ($assigned) {
+                                $assignedRoles['امين_سر']++;
+                                $totalObserversAssigned++;
+                                unset($eligibleUsers[$key]); // إزالة المستخدم من القائمة
+                            }
+                        }
                     }
                 }
 
-                // ثم المراقبين العاديين
-                elseif ($role === 'مراقب' && $observersAssigned < $maxObservers) {
-                    $assigned = self::assignObserver($user, $schedule, $room);
-                    if ($assigned) {
-                        $observersAssigned++;
+                // --- تعيين المراقبين العاديين ---
+                foreach ($eligibleUsers as $key => $user) {
+                    if ($assignedRoles['مراقب'] >= $maxObservers) {
+
+                        break;
+                    }
+
+                    $role = $user->getRoleNames()->first();
+                    if ($role === 'مراقب') {
+                        // التحقق من التعارض في الوقت
+                        $hasConflict = Observer::where('user_id', $user->id)
+                            ->whereHas('schedule', function ($query) use ($schedule) {
+                                $query->where('schedule_exam_date', $schedule->schedule_exam_date)
+                                    ->where('schedule_time_slot', $schedule->schedule_time_slot);
+                            })->exists();
+
+                        if (! $hasConflict) {
+                            $assigned = self::assignObserver($user, $schedule, $room);
+                            if ($assigned) {
+                                $assignedRoles['مراقب']++;
+                                $totalObserversAssigned++;
+                                unset($eligibleUsers[$key]); // إزالة المستخدم من القائمة
+                            }
+                        }
                     }
                 }
 
-                if ($assigned) {
-                    $totalObserversAssigned++;
-                    unset($usersWithoutObservers[$userKey]);
-                }
+                // --- التحقق من اكتمال القاعة ---
+                $totalRequired = $maxHeads + $maxSecretaries + $maxObservers;
 
-                // التوقف إذا اكتملت جميع الأدوار
-                if ($headsAssigned >= $maxHeads
-                    && $secretariesAssigned >= $maxSecretaries
-                    && $observersAssigned >= $maxObservers) {
-                    break;
+                $totalAssigned = array_sum($assignedRoles);
+
+                if ($totalAssigned === $totalRequired) {
+                    $totalRoomsAssigned++;
+                } else {
+                    // إشعار في حالة عدم اكتمال القاعة
+                    Notification::make()
+                        ->title('تحذير')
+                        ->body("القاعة {$room->room_name} لم تُعبأ بالكامل (ناقص ".($totalRequired - $totalAssigned).' مراقبين)')
+                        ->warning()
+                        ->send();
                 }
             }
-
-            if ($observersAssigned > 0 || $secretariesAssigned > 0 || $headsAssigned > 0) {
-                $totalRoomsAssigned++;
-            }
-
-            // إعادة تحميل البيانات بعد التعديلات
-            $usersWithoutObservers = $usersWithoutObservers->values();
         }
 
-        // إظهار رسالة تنبيه بناءً على النتيجة
-        if ($totalObserversAssigned > 0) {
-            Notification::make()
-                ->title('تم التوزيع بنجاح')
-                ->body("تم توزيع $totalObserversAssigned مراقب على $totalRoomsAssigned قاعة")
-                ->success()
-                ->send();
-        } else {
-            Notification::make()
-                ->title('لم يتم التوزيع')
-                ->body('لم يتم توزيع أي مراقبين.')
-                ->warning()
-                ->send();
-        }
+        // إظهار الإشعار النهائي
+        Notification::make()
+            ->title('تم التوزيع')
+            // ->body("تم تعيين $totalObserversAssigned مراقب في $totalRoomsAssigned قاعة مكتملة")
+            ->success()
+            ->send();
     }
 
-    // باقي الدوال المساعدة تبقى كما هي
-
-    // ---------------------------
-    // Helper Methods (Static)
-    // ---------------------------
-
+    // دالة مساعدة لتعيين المراقب (كما هي)
     private static function assignObserver($user, $schedule, $room): bool
     {
         try {
-            // التحقق من تعارض الجداول الزمنية
-            $conflictingObservers = Observer::where('user_id', $user->id)
-                ->whereHas('schedule', function ($query) use ($schedule) {
-                    $query->where('schedule_exam_date', $schedule->schedule_exam_date)
-                        ->where('schedule_time_slot', $schedule->schedule_time_slot);
-                })
-                ->exists();
-            if ($conflictingObservers) {
-                Notification::make()
-                    ->title('خطأ')
-                    ->body('هذا المراقب معين بالفعل في جدول آخر في نفس الوقت والتاريخ.')
-                    ->danger()
-                    ->send();
-
-                return false;
-            }
-
             Observer::create([
                 'user_id' => $user->id,
                 'schedule_id' => $schedule->schedule_id,
