@@ -12,7 +12,7 @@ class ObserverDistributionService
 
     public static function distributeObservers()
     {
-        $schedulesGroupedByDate = Schedule::with('rooms')->get()->groupBy('date');
+        $schedulesGroupedByDate = Schedule::with('rooms')->get()->groupBy('schedule_exam_date');
         $originalEligibleUsers = User::whereHas('roles', function ($query) {
             $query->where('name', 'مراقب');
         })->get();
@@ -41,7 +41,7 @@ class ObserverDistributionService
     protected static function assignObserver(User $user, Schedule $schedule, $room)
     {
         // تعيين المراقب للقائمة
-        $schedule->observers()->attach($user->id, ['room_id' => $room->id]);
+        $schedule->observers()->attach($user->id, ['room_id' => $room->room_id]);
         self::$usedUserIds[] = $user->id; // تسجيل المستخدم لهذا اليوم فقط
     }
 
