@@ -30,10 +30,11 @@ class ObserverDistributionService
 
         foreach ($schedulesGroupedByDate as $examDate => $schedules) {
             // إعادة تهيئة قائمة المستخدمين المؤهلين لكل يوم امتحان
-            $eligibleUsers = $originalEligibleUsers->copy();
+            $eligibleUsers = collect($originalEligibleUsers->all());
 
             foreach ($schedules as $schedule) {
                 foreach ($schedule->rooms as $room) {
+
                     // استرجاع المراقبين الحاليين في القاعة
                     $existingObservers = Observer::where('room_id', $room->room_id)->get();
 
