@@ -2,50 +2,42 @@
 
 namespace App\Services;
 
+use App\Models\Observer;
 use App\Models\Schedule;
 use App\Models\User;
-use Illuminate\Support\Collection;
 
 class ObserverDistributionService
 {
     protected static array $usedUserIds = [];
 
-    public static function distributeObservers()
+    public static function distributeObservers($schedules, $eligibleUsers)
     {
-        $schedulesGroupedByDate = Schedule::with('rooms')->get()->groupBy('schedule_exam_date');
-        $originalEligibleUsers = User::whereHas('roles', function ($query) {
-            $query->where('name', 'مراقب');
-        })->get();
+        self::$usedUserIds = [];
 
-        foreach ($schedulesGroupedByDate as $examDate => $schedules) {
-            $eligibleUsers = collect($originalEligibleUsers->all()); // إعادة تهيئة قائمة المستخدمين لكل يوم جديد
+        foreach ($schedules as $schedule) {
+            $availableUsers = $eligibleUsers->reject(fn ($user) => self::hasConflict($user, $schedule));
 
-            foreach ($schedules as $schedule) {
-                foreach ($schedule->rooms as $room) {
-                    $observer = self::findEligibleObserver($eligibleUsers, $schedule);
-                    if ($observer) {
-                        self::assignObserver($observer, $schedule, $room);
-                    }
+            foreach ($schedule->rooms as $room) {
+                if ($availableUsers->isNotEmpty()) {
+                    $user = $availableUsers->shift(); // اختيار أول مستخدم متاح
+                    self::assignObserver($user, $schedule, $room);
                 }
             }
         }
     }
 
-    protected static function findEligibleObserver(Collection $eligibleUsers, Schedule $schedule)
-    {
-        return $eligibleUsers->first(function ($user) use ($schedule) {
-            return ! in_array($user->id, self::$usedUserIds) && ! self::hasConflict($user, $schedule);
-        });
-    }
-
     protected static function assignObserver(User $user, Schedule $schedule, $room)
     {
-        // تعيين المراقب للقائمة
-        $schedule->observers()->attach($user->id, ['room_id' => $room->room_id]);
-        self::$usedUserIds[] = $user->id; // تسجيل المستخدم لهذا اليوم فقط
+        Observer::create([
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->schedule_id,
+            'room_id' => $room->room_id,
+        ]);
+
+        self::$usedUserIds[] = $user->id;
     }
 
-    protected static function hasConflict(User $user, Schedule $schedule)
+    protected static function hasConflict(User $user, Schedule $schedule): bool
     {
         return $user->schedules()->where('schedule_exam_date', $schedule->schedule_exam_date)->exists();
     }
