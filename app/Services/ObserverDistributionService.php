@@ -47,6 +47,6 @@ class ObserverDistributionService
 
     protected static function hasConflict(User $user, Schedule $schedule)
     {
-        return $user->schedules()->where('date', $schedule->schedule_exam_date)->exists();
+        return $user->schedules()->where('schedule_exam_date', $schedule->schedule_exam_date)->exists();
     }
 }
