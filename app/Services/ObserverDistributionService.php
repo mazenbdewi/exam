@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\Observer;
 use App\Models\Schedule;
 use App\Models\User;
-use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 
 class ObserverDistributionService
@@ -29,7 +29,7 @@ class ObserverDistributionService
 
     private static function processDate(string $date)
     {
-        Log::info("بدء معالجة تاريخ: {$date}");
+        Log::info("معالجة تاريخ: {$date}");
 
         // الحصول على جميع الجداول لهذا التاريخ مع القاعات
         $schedules = Schedule::with(['rooms.observers.user'])
@@ -37,28 +37,8 @@ class ObserverDistributionService
             ->orderBy('schedule_time_slot')
             ->get();
 
-        if ($schedules->isEmpty()) {
-            Log::info("لا توجد جداول في تاريخ: {$date}");
-
-            return;
-        }
-
         // الحصول على المراقبين المؤهلين مع استبعاد المستخدمين المعينين مسبقًا
-        $eligibleUsers = self::getEligibleUsers($date);
-
-        foreach ($schedules as $schedule) {
-            foreach ($schedule->rooms as $room) {
-                self::fillRoom($room, $eligibleUsers, $schedule);
-            }
-        }
-
-        // تحديث قائمة المستخدمين المعينين بعد كل تاريخ
-        self::updateUsedUsers($date);
-    }
-
-    private static function getEligibleUsers(string $date): Collection
-    {
-        return User::whereHas('roles', fn ($q) => $q->whereIn('name', ['رئيس_قاعة', 'امين_سر', 'مراقب']))
+        $eligibleUsers = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['رئيس_قاعة', 'امين_سر', 'مراقب']))
             ->whereNotIn('id', self::$usedUserIds)
             ->withCount(['observers' => fn ($q) => $q->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $date))])
             ->get()
@@ -69,6 +49,17 @@ class ObserverDistributionService
                 $user->hasRole('مراقب') ? 1 : 0,
                 $user->years_experience,
             ]);
+
+        Log::info('عدد المرشحين المؤهلين: '.$eligibleUsers->count());
+
+        foreach ($schedules as $schedule) {
+            foreach ($schedule->rooms as $room) {
+                self::fillRoom($room, $eligibleUsers, $schedule);
+            }
+        }
+
+        // تحديث قائمة المستخدمين المعينين بعد كل تاريخ
+        self::updateUsedUsers($date);
     }
 
     private static function fillRoom($room, Collection &$eligibleUsers, $schedule)
