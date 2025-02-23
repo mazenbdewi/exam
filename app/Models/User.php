@@ -48,19 +48,31 @@ class User extends Authenticatable
         'password' => 'hashed',
     ];
 
-    public function getMaxObserversByAge(): int
-    {
-        $age = Carbon::parse($this->birth_date)->age; // حساب العمر
+    // public function getMaxObserversByAge(): int
+    // {
+    //     $age = Carbon::parse($this->birth_date)->age; // حساب العمر
 
-        if ($age >= 60) {
-            return 6;
-        } elseif ($age > 50) {
-            return 10;
-        } elseif ($age > 40) {
-            return 12;
-        } else {
-            return 18;
-        }
+    //     if ($age >= 60) {
+    //         return 6;
+    //     } elseif ($age > 50) {
+    //         return 10;
+    //     } elseif ($age > 40) {
+    //         return 12;
+    //     } else {
+    //         return 18;
+    //     }
+    // }
+
+    public function getMaxObserversByAge()
+    {
+        $age = Carbon::parse($this->birthdate)->age;
+
+        return match (true) {
+            $age >= 60 => 6,
+            $age >= 50 => 10,
+            $age >= 40 => 12,
+            default => 18
+        };
     }
     // public function getAllowedAssignmentsAttribute()
     // {
