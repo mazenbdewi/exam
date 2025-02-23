@@ -174,23 +174,16 @@ class ObserverResource extends Resource
                 Tables\Actions\DeleteAction::make(),
             ])
             ->headerActions([
-                Tables\Actions\Action::make('توزيع المراقبين')
+                Tables\Actions\Action::make('distributeObservers')
+                    ->label('توزيع المراقبين')
+                    ->icon('heroicon-o-users')
+                    ->color('primary')
+                    ->hidden(fn () => ! auth()->user()->hasRole('super_admin'))
                     ->action(function () {
-                        $schedules = Schedule::all();
-                        $eligibleUsers = User::where('role', 'مراقب')->get();
+                        // static::distributeObservers();
+                        ObserverDistributionService::distributeObservers();
 
-                        ObserverDistributionService::distributeObservers($schedules, $eligibleUsers);
                     }),
-                // Tables\Actions\Action::make('distributeObservers')
-                //     ->label('توزيع المراقبين')
-                //     ->icon('heroicon-o-users')
-                //     ->color('primary')
-                //     ->hidden(fn () => ! auth()->user()->hasRole('super_admin'))
-                //     ->action(function () {
-                //         // static::distributeObservers();
-                //         ObserverDistributionService::distributeObservers();
-
-                //     }),
                 Tables\Actions\Action::make('export')
                     ->label('تصدير إلى Excel')
                     ->icon('heroicon-o-arrow-down-tray')
