@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\Observer;
 use App\Models\Schedule;
 use App\Models\User;
+use InvalidArgumentException;
 
 class ObserverDistributionService
 {
@@ -12,6 +12,10 @@ class ObserverDistributionService
 
     public static function distributeObservers($schedules, $eligibleUsers)
     {
+        if (! $schedules || ! $eligibleUsers) {
+            throw new InvalidArgumentException('يجب تمرير كل من الجداول والمستخدمين المؤهلين إلى الدالة.');
+        }
+
         self::$usedUserIds = [];
 
         foreach ($schedules as $schedule) {
@@ -19,7 +23,7 @@ class ObserverDistributionService
 
             foreach ($schedule->rooms as $room) {
                 if ($availableUsers->isNotEmpty()) {
-                    $user = $availableUsers->shift(); // اختيار أول مستخدم متاح
+                    $user = $availableUsers->shift();
                     self::assignObserver($user, $schedule, $room);
                 }
             }
@@ -28,16 +32,16 @@ class ObserverDistributionService
 
     protected static function assignObserver(User $user, Schedule $schedule, $room)
     {
-        Observer::create([
-            'user_id' => $user->id,
-            'schedule_id' => $schedule->schedule_id,
-            'room_id' => $room->room_id,
-        ]);
-
-        self::$usedUserIds[] = $user->id;
+        // التأكد من أن العلاقة هي belongsToMany لاستخدام attach
+        if (method_exists($schedule->observers(), 'attach')) {
+            $schedule->observers()->attach($user->id, ['room_id' => $room->room_id]);
+            self::$usedUserIds[] = $user->id; // تسجيل المستخدم لهذا اليوم فقط
+        } else {
+            throw new InvalidArgumentException('العلاقة observers يجب أن تكون من نوع BelongsToMany لاستخدام attach.');
+        }
     }
 
-    protected static function hasConflict(User $user, Schedule $schedule): bool
+    protected static function hasConflict(User $user, Schedule $schedule)
     {
         return $user->schedules()->where('schedule_exam_date', $schedule->schedule_exam_date)->exists();
     }
