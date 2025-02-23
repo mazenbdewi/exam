@@ -475,7 +475,14 @@ class ObserverResource extends Resource
                     }
                 }
 
-                $totalAssigned = array_sum($required) - array_sum([$needed['رئيس_قاعة'], $needed['امين_سر'], $needed['مراقب']]);
+                // $totalAssigned = array_sum($required) - array_sum([$needed['رئيس_قاعة'], $needed['امين_سر'], $needed['مراقب']]);
+                $remainingNeeded = [
+                    'رئيس_قاعة' => $required['رئيس_قاعة'] - ($required['رئيس_قاعة'] - $neededHead),
+                    'امين_سر' => $required['امين_سر'] - ($required['امين_سر'] - $neededSecretary),
+                    'مراقب' => $required['مراقب'] - ($required['مراقب'] - $neededObserver),
+                ];
+
+                $totalAssigned = array_sum($required) - array_sum($remainingNeeded);
                 $totalRequired = array_sum($required);
 
                 if ($totalAssigned === $totalRequired) {
