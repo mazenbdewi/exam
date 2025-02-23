@@ -177,7 +177,7 @@ class ObserverResource extends Resource
                 Tables\Actions\Action::make('توزيع المراقبين')
                     ->action(function () {
                         $schedules = Schedule::all();
-                        $eligibleUsers = User::where('role', 'observer')->get();
+                        $eligibleUsers = User::where('role', 'مراقب')->get();
 
                         ObserverDistributionService::distributeObservers($schedules, $eligibleUsers);
                     }),
