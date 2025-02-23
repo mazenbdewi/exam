@@ -10,13 +10,13 @@ use Illuminate\Support\Facades\Log;
 
 class ObserverDistributionService
 {
-    protected static array $usedUserIds = [];
+    // تغيير المصفوفة الثابتة إلى مصفوفة ديناميكية لتخزين التعيينات لكل تاريخ
+    protected static array $dateWiseAssignments = [];
 
     public static function distributeObservers()
     {
-        self::$usedUserIds = []; // إعادة تهيئة القائمة عند كل تنفيذ
+        self::$dateWiseAssignments = []; // إعادة التهيئة
 
-        // الحصول على جميع التواريخ المرتبة
         $dates = Schedule::orderBy('schedule_exam_date')
             ->pluck('schedule_exam_date')
             ->unique()
@@ -29,9 +29,8 @@ class ObserverDistributionService
 
     private static function processDate(string $date)
     {
-        Log::info("بدء معالجة تاريخ: {$date}");
+        Log::info("معالجة تاريخ: {$date}");
 
-        // الحصول على جميع الجداول لهذا التاريخ مع القاعات
         $schedules = Schedule::with(['rooms.observers.user'])
             ->where('schedule_exam_date', $date)
             ->orderBy('schedule_time_slot')
@@ -43,26 +42,30 @@ class ObserverDistributionService
             return;
         }
 
-        // الحصول على المراقبين المؤهلين مع استبعاد المستخدمين المعينين مسبقًا
+        // الحصول على المستخدمين المؤهلين لهذا التاريخ فقط
         $eligibleUsers = self::getEligibleUsers($date);
 
         foreach ($schedules as $schedule) {
             foreach ($schedule->rooms as $room) {
-                self::fillRoom($room, $eligibleUsers, $schedule);
+                self::fillRoom($room, $eligibleUsers, $schedule, $date);
             }
         }
 
-        // تحديث قائمة المستخدمين المعينين بعد كل تاريخ
-        self::updateUsedUsers($date);
+        // تحديث التعيينات لهذا التاريخ
+        self::updateDateAssignments($date);
     }
 
     private static function getEligibleUsers(string $date): Collection
     {
         return User::whereHas('roles', fn ($q) => $q->whereIn('name', ['رئيس_قاعة', 'امين_سر', 'مراقب']))
-            ->whereNotIn('id', self::$usedUserIds)
-            ->withCount(['observers' => fn ($q) => $q->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $date))])
+            ->with(['observers' => fn ($q) => $q->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $date))])
             ->get()
-            ->filter(fn ($user) => $user->observers_count < $user->getMaxObserversByAge())
+            ->filter(function ($user) {
+                // التحقق من الحد الأقصى للمراقبات لهذا التاريخ فقط
+                $currentCount = $user->observers->count();
+
+                return $currentCount < $user->getMaxObserversByAge();
+            })
             ->sortByDesc(fn ($user) => [
                 $user->hasRole('رئيس_قاعة') ? 3 : 0,
                 $user->hasRole('امين_سر') ? 2 : 0,
@@ -71,7 +74,7 @@ class ObserverDistributionService
             ]);
     }
 
-    private static function fillRoom($room, Collection &$eligibleUsers, $schedule)
+    private static function fillRoom($room, Collection &$eligibleUsers, $schedule, string $date)
     {
         $existingObservers = $room->observers->groupBy(fn ($o) => $o->user->getRoleNames()->first());
 
@@ -80,8 +83,6 @@ class ObserverDistributionService
             'امين_سر' => max(($room->room_type === 'big' ? 2 : 1) - $existingObservers->get('امين_سر', collect())->count(), 0),
             'مراقب' => max(($room->room_type === 'big' ? 8 : 4) - $existingObservers->get('مراقب', collect())->count(), 0),
         ];
-
-        Log::info("القاعة {$room->room_name} تتطلب: ".json_encode($required));
 
         foreach ($required as $role => $count) {
             if ($count <= 0) {
@@ -95,34 +96,51 @@ class ObserverDistributionService
                     break;
                 }
 
-                if (! self::hasConflict($user, $schedule)) {
+                // التحقق من التعارض الزمني فقط في نفس التاريخ والفترة
+                if (! self::hasTimeConflict($user, $schedule)) {
                     if (self::assignObserver($user, $schedule, $room)) {
                         $eligibleUsers->forget($key);
-                        self::$usedUserIds[] = $user->id;
+                        self::trackAssignment($date, $user->id);
                         $count--;
-                        Log::info("تم تعيين {$user->name} كـ {$role} في {$room->room_name}");
+                        Log::info("تم تعيين {$user->name} في {$date}");
                     }
                 }
             }
         }
     }
 
-    private static function hasConflict(User $user, Schedule $schedule): bool
+    private static function hasTimeConflict(User $user, Schedule $schedule): bool
     {
-        return Observer::where('user_id', $user->id)
-            ->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $schedule->schedule_exam_date)
-                ->where('schedule_time_slot', $schedule->schedule_time_slot))
+        return $user->schedules()
+            ->where('schedule_exam_date', $schedule->schedule_exam_date)
+            ->where('schedule_time_slot', $schedule->schedule_time_slot)
             ->exists();
+    }
+
+    private static function trackAssignment(string $date, int $userId)
+    {
+        if (! isset(self::$dateWiseAssignments[$date])) {
+            self::$dateWiseAssignments[$date] = [];
+        }
+        self::$dateWiseAssignments[$date][] = $userId;
+    }
+
+    private static function updateDateAssignments(string $date)
+    {
+        // لا حاجة للقيام بأي شيء إضافي هنا
     }
 
     private static function assignObserver(User $user, Schedule $schedule, $room): bool
     {
         try {
-            Observer::create([
-                'user_id' => $user->id,
-                'schedule_id' => $schedule->schedule_id,
-                'room_id' => $room->room_id,
-            ]);
+            Observer::updateOrCreate(
+                [
+                    'user_id' => $user->id,
+                    'schedule_id' => $schedule->schedule_id,
+                    'room_id' => $room->room_id,
+                ],
+                []
+            );
 
             return true;
         } catch (\Exception $e) {
@@ -130,15 +148,5 @@ class ObserverDistributionService
 
             return false;
         }
-    }
-
-    private static function updateUsedUsers(string $date)
-    {
-        $newUsed = Observer::whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $date))
-            ->pluck('user_id')
-            ->unique()
-            ->toArray();
-
-        self::$usedUserIds = array_unique(array_merge(self::$usedUserIds, $newUsed));
     }
 }
