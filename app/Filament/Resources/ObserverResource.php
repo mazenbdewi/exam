@@ -476,12 +476,27 @@ class ObserverResource extends Resource
                 }
 
                 // $totalAssigned = array_sum($required) - array_sum([$needed['رئيس_قاعة'], $needed['امين_سر'], $needed['مراقب']]);
-                $remainingNeeded = [
-                    'رئيس_قاعة' => $required['رئيس_قاعة'] - ($required['رئيس_قاعة'] - $neededHead),
-                    'امين_سر' => $required['امين_سر'] - ($required['امين_سر'] - $neededSecretary),
-                    'مراقب' => $required['مراقب'] - ($required['مراقب'] - $neededObserver),
-                ];
+                $remainingNeeded = $required; // تهيئة المتبقي بالقيم الأصلية
 
+                foreach (['رئيس_قاعة', 'امين_سر', 'مراقب'] as $role) {
+                    $needed = $required[$role];
+                    $candidates = $eligibleUsers->filter(fn ($u) => $u->hasRole($role));
+
+                    foreach ($candidates as $user) {
+                        if ($needed <= 0) {
+                            break;
+                        }
+
+                        // ... (كود التحقق من التعارض)
+
+                        if (self::assignObserver(...)) {
+                            $needed--;
+                            $remainingNeeded[$role] = $needed; // تحديث القيمة المتبقية
+                        }
+                    }
+                }
+
+                // حساب الإجمالي بعد الانتهاء من جميع الأدوار
                 $totalAssigned = array_sum($required) - array_sum($remainingNeeded);
                 $totalRequired = array_sum($required);
 
