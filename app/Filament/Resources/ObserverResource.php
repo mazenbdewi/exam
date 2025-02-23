@@ -174,7 +174,7 @@ class ObserverResource extends Resource
                 Tables\Actions\DeleteAction::make(),
             ])
             ->headerActions([
-                Action::make('توزيع المراقبين')
+                Tables\Actions\Action::make('توزيع المراقبين')
                     ->action(function () {
                         $schedules = Schedule::all();
                         $eligibleUsers = User::where('role', 'observer')->get();
