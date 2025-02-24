@@ -5,18 +5,37 @@ namespace App\Services;
 use App\Models\Observer;
 use App\Models\Schedule;
 use App\Models\User;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Log;
 
 class ObserverDistributionService
 {
+    protected static array $roleGroups = [
+        'رئيس_قاعة' => ['pointer' => 0, 'users' => []],
+        'امين_سر' => ['pointer' => 0, 'users' => []],
+        'مراقب' => ['pointer' => 0, 'users' => []],
+    ];
+
     public static function distributeObservers()
     {
+        self::initRoleGroups();
+
         $dates = Schedule::orderBy('schedule_exam_date')
             ->pluck('schedule_exam_date')
             ->unique();
 
         foreach ($dates as $date) {
             self::processDate($date);
+        }
+    }
+
+    private static function initRoleGroups()
+    {
+        foreach (array_keys(self::$roleGroups) as $role) {
+            self::$roleGroups[$role]['users'] = User::whereHas('roles', fn ($q) => $q->where('name', $role))
+                ->with('observers')
+                ->orderByDesc('years_experience')
+                ->get()
+                ->toArray();
         }
     }
 
@@ -48,7 +67,8 @@ class ObserverDistributionService
 
         foreach ($required as $role => $count) {
             for ($i = 0; $i < $count; $i++) {
-                $user = self::findAvailableUser($role, $schedule, $date);
+                $user = self::getNextAvailableUser($role, $schedule, $date);
+
                 if ($user) {
                     Observer::firstOrCreate([
                         'user_id' => $user->id,
@@ -63,23 +83,42 @@ class ObserverDistributionService
         }
     }
 
-    private static function findAvailableUser(string $role, Schedule $schedule, string $date): ?User
+    private static function getNextAvailableUser(string $role, Schedule $schedule, string $date): ?User
     {
-        return User::whereHas('roles', fn ($q) => $q->where('name', $role))
-            ->whereDoesntHave('observers', function ($q) use ($schedule) {
-                $q->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $schedule->schedule_exam_date)
-                    ->where('schedule_time_slot', $schedule->schedule_time_slot)
-                );
-            })
-            ->get()
-            ->filter(fn ($user) => $user->observers()->count() < $user->getMaxObservers()['total'] &&
-                $user->observers()->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $date)
-                )->count() < $user->getMaxObservers()['daily']
-            )
-            ->sortBy([
-                fn ($a, $b) => $a->observers()->count() - $b->observers()->count(),
-                fn ($a, $b) => $b->years_experience - $a->years_experience,
-            ])
-            ->first();
+        $users = collect(self::$roleGroups[$role]['users'])
+            ->filter(function ($user) use ($schedule, $date) {
+                $userModel = User::find($user['id']);
+                returnself::hasConflict($userModel, $schedule) && self::canAssign($userModel, $date);
+            });
+
+        if ($users->isEmpty()) {
+            return null;
+        }
+
+        $pointer = self::$roleGroups[$role]['pointer'] % $users->count();
+        self::$roleGroups[$role]['pointer']++;
+
+        return User::find($users[$pointer]['id']);
+    }
+
+    private static function hasConflict(User $user, Schedule $schedule): bool
+    {
+        return $user->schedules()
+            ->where('schedule_exam_date', $schedule->schedule_exam_date)
+            ->where('schedule_time_slot', $schedule->schedule_time_slot)
+            ->exists();
+    }
+
+    private static function canAssign(User $user, string $date): bool
+    {
+        $limits = $user->getMaxObservers();
+
+        $dailyCount = $user->observers()
+            ->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $date))
+            ->count();
+
+        $totalCount = $user->observers()->count();
+
+        return $dailyCount < $limits['daily'] && $totalCount < $limits['total'];
     }
 }
