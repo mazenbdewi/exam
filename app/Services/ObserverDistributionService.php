@@ -42,7 +42,7 @@ class ObserverDistributionService
 
     private static function processDate(string $date)
     {
-        Log::info("====== بدء التوزيع لتاريخ: {$date} ======");
+        // Log::info("====== بدء التوزيع لتاريخ: {$date} ======");
 
         $schedules = Schedule::with(['rooms.observers.user'])
             ->where('schedule_exam_date', $date)
@@ -76,9 +76,9 @@ class ObserverDistributionService
                         'schedule_id' => $schedule->schedule_id,
                         'room_id' => $room->room_id,
                     ]);
-                    Log::info("تم تعيين {$user->name} كـ {$role}");
+                    // Log::info("تم تعيين {$user->name} كـ {$role}");
                 } else {
-                    Log::warning("لا يوجد مراقبون متاحون للدور: {$role}");
+                    // Log::warning("لا يوجد مراقبون متاحون للدور: {$role}");
                 }
             }
         }
