@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\Observer;
 use App\Models\Schedule;
 use App\Models\User;
-use Illuminate\Support\Log;
+use Illuminate\Support\Facades\Log;
 
 class ObserverDistributionService
 {
@@ -42,7 +42,7 @@ class ObserverDistributionService
 
     private static function processDate(string $date)
     {
-        // Log::info("====== بدء التوزيع لتاريخ: {$date} ======");
+        Log::info("====== بدء التوزيع لتاريخ: {$date} ======");
 
         $schedules = Schedule::with(['rooms.observers.user'])
             ->where('schedule_exam_date', $date)
@@ -76,9 +76,9 @@ class ObserverDistributionService
                         'schedule_id' => $schedule->schedule_id,
                         'room_id' => $room->room_id,
                     ]);
-                    // Log::info("تم تعيين {$user->name} كـ {$role}");
+                    Log::info("تم تعيين {$user->name} كـ {$role}");
                 } else {
-                    // Log::warning("لا يوجد مراقبون متاحون للدور: {$role}");
+                    Log::warning("لا يوجد مراقبون متاحون للدور: {$role}");
                 }
             }
         }
@@ -97,10 +97,12 @@ class ObserverDistributionService
             return null;
         }
 
-        // اختيار الأصغر سنًا من المجموعة المتاحة
-        $youngestUser = $users->sortBy('age')->first();
+        // اختيار الأقل استخدامًا في التواريخ السابقة
+        $leastUsedUser = $users->sortBy(function ($user) {
+            return User::find($user['id'])->observers()->count();
+        })->first();
 
-        return User::find($youngestUser['id']);
+        return User::find($leastUsedUser['id']);
     }
 
     private static function hasConflict(User $user, Schedule $schedule): bool
