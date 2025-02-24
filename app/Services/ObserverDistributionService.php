@@ -33,8 +33,9 @@ class ObserverDistributionService
         foreach (array_keys(self::$roleGroups) as $role) {
             self::$roleGroups[$role]['users'] = User::whereHas('roles', fn ($q) => $q->where('name', $role))
                 ->with('observers')
-                ->orderByDesc('years_experience')
                 ->get()
+                ->sortBy('age') // الأصغر سنًا أولاً
+                ->values()
                 ->toArray();
         }
     }
@@ -88,17 +89,18 @@ class ObserverDistributionService
         $users = collect(self::$roleGroups[$role]['users'])
             ->filter(function ($user) use ($schedule, $date) {
                 $userModel = User::find($user['id']);
-                returnself::hasConflict($userModel, $schedule) && self::canAssign($userModel, $date);
+
+                return ! self::hasConflict($userModel, $schedule) && self::canAssign($userModel, $date);
             });
 
         if ($users->isEmpty()) {
             return null;
         }
 
-        $pointer = self::$roleGroups[$role]['pointer'] % $users->count();
-        self::$roleGroups[$role]['pointer']++;
+        // اختيار الأصغر سنًا من المجموعة المتاحة
+        $youngestUser = $users->sortBy('age')->first();
 
-        return User::find($users[$pointer]['id']);
+        return User::find($youngestUser['id']);
     }
 
     private static function hasConflict(User $user, Schedule $schedule): bool

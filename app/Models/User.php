@@ -48,41 +48,66 @@ class User extends Authenticatable
         'password' => 'hashed',
     ];
 
-    // app/Models/User.php
+    public function getAgeAttribute()
+    {
+        return Carbon::parse($this->birth_date)->age;
+    }
+
     public function getMaxObservers(): array
     {
-        $age = Carbon::parse($this->birth_date)->age;
+        $age = $this->age;
 
         return [
             'daily' => match (true) {
-                $age >= 60 => 2,
-                $age >= 50 => 3,
-                $age >= 40 => 4,
-                default => 5
+                $age >= 60 => 1,  // كبار السن: حد يومي أقل
+                $age >= 50 => 2,
+                $age >= 40 => 3,
+                default => 4      // الشباب: حد يومي أعلى
             },
             'total' => match (true) {
-                $age >= 60 => 6,
-                $age >= 50 => 10,
+                $age >= 60 => 5,  // كبار السن: حد إجمالي أقل
+                $age >= 50 => 8,
                 $age >= 40 => 12,
-                default => 18
+                default => 15     // الشباب: حد إجمالي أعلى
             },
         ];
     }
 
-    public function getMaxObserversByAge(): int
-    {
-        $age = Carbon::parse($this->birth_date)->age; // حساب العمر
+    // // app/Models/User.php
+    // public function getMaxObservers(): array
+    // {
+    //     $age = Carbon::parse($this->birth_date)->age;
 
-        if ($age >= 60) {
-            return 6;
-        } elseif ($age > 50) {
-            return 10;
-        } elseif ($age > 40) {
-            return 12;
-        } else {
-            return 18;
-        }
-    }
+    //     return [
+    //         'daily' => match (true) {
+    //             $age >= 60 => 2,
+    //             $age >= 50 => 3,
+    //             $age >= 40 => 4,
+    //             default => 5
+    //         },
+    //         'total' => match (true) {
+    //             $age >= 60 => 6,
+    //             $age >= 50 => 10,
+    //             $age >= 40 => 12,
+    //             default => 18
+    //         },
+    //     ];
+    // }
+
+    // public function getMaxObserversByAge(): int
+    // {
+    //     $age = Carbon::parse($this->birth_date)->age; // حساب العمر
+
+    //     if ($age >= 60) {
+    //         return 6;
+    //     } elseif ($age > 50) {
+    //         return 10;
+    //     } elseif ($age > 40) {
+    //         return 12;
+    //     } else {
+    //         return 18;
+    //     }
+    // }
 
     // public function getMaxObserversByAge()
     // {
