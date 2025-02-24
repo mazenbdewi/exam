@@ -109,6 +109,14 @@ class User extends Authenticatable
         }
     }
 
+    public function delete()
+    {
+        if ($this->email == 'mazen@mazen.mazen') {
+            throw new \Exception('لا يمكن حذف مستخدم محمي.');
+        }
+
+        return parent::delete();
+    }
     // public function getMaxObserversByAge()
     // {
     //     $age = Carbon::parse($this->birthdate)->age;
