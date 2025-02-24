@@ -69,20 +69,20 @@ class User extends Authenticatable
         ];
     }
 
-    // public function getMaxObserversByAge(): int
-    // {
-    //     $age = Carbon::parse($this->birth_date)->age; // حساب العمر
+    public function getMaxObserversByAge(): int
+    {
+        $age = Carbon::parse($this->birth_date)->age; // حساب العمر
 
-    //     if ($age >= 60) {
-    //         return 6;
-    //     } elseif ($age > 50) {
-    //         return 10;
-    //     } elseif ($age > 40) {
-    //         return 12;
-    //     } else {
-    //         return 18;
-    //     }
-    // }
+        if ($age >= 60) {
+            return 6;
+        } elseif ($age > 50) {
+            return 10;
+        } elseif ($age > 40) {
+            return 12;
+        } else {
+            return 18;
+        }
+    }
 
     // public function getMaxObserversByAge()
     // {
