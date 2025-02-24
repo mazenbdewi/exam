@@ -67,9 +67,8 @@ class ObserverDistributionService
                 );
             })
             ->get()
-            ->filter(fn ($user) => $user->observers()->count() < $user->getMaxObservers()['total'] &&
-                $user->observers()->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $schedule->schedule_exam_date)
-                )->count() < $user->getMaxObservers()['daily']
+            ->filter(fn ($user) => $user->observers()->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $schedule->schedule_exam_date)
+            )->count() < $user->getMaxObservers()['daily']
             )
             ->sortBy([
                 fn ($a, $b) => $a->observers()->count() - $b->observers()->count(),
