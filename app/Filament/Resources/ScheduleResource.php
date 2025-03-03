@@ -58,7 +58,6 @@ class ScheduleResource extends Resource
                             ->translateLabel()
                             ->maxLength(255)
                             ->suffixIcon('heroicon-m-rectangle-group')
-                            ->unique(ignoreRecord: true)
                             ->hintColor('primary')
                             ->autofocus()
                             ->placeholder('اكتب اسم القاعة من فضلك')
