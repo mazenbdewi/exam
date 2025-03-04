@@ -17,6 +17,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Validation\Rule;
 
 class ScheduleResource extends Resource
 {
@@ -39,6 +40,7 @@ class ScheduleResource extends Resource
                         Select::make('department_id')
                             ->relationship('department', 'department_name')
                             ->label('القسم')
+                            ->live()
                             ->required(),
                         Select::make('schedule_academic_levels')
                             ->options([
@@ -61,7 +63,16 @@ class ScheduleResource extends Resource
                             ->hintColor('primary')
                             ->autofocus()
                             ->placeholder('اكتب اسم القاعة من فضلك')
-                            ->markAsRequired(),
+                            ->markAsRequired()
+                            ->rules([
+                                function ($get) {
+                                    return Rule::unique('schedules', 'schedule_subject')
+                                        ->where('department_id', $get('department_id'));
+                                },
+                            ])
+                            ->validationMessages([
+                                'unique' => 'هذه المادة موجودة بالفعل في هذا القسم.',
+                            ]),
                         DatePicker::make('schedule_exam_date')
                             ->label('تاريخ الامتحان')
                             ->required(),
