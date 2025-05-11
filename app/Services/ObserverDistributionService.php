@@ -95,8 +95,17 @@ class ObserverDistributionService
 
     private static function findBestUserForRole(string $role, Schedule $schedule, Room $room): ?User
     {
+        $flattenedUsedIds = collect(self::$usedUsers)
+            ->flatten()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // 2. استخدام whereNotIn مع المصفوفة المسطحة
         return User::whereHas('roles', fn ($q) => $q->where('name', $role))
-            ->whereNotIn('id', self::$usedUsers)
+            ->when(! empty($flattenedUsedIds), function ($query) use ($flattenedUsedIds) {
+                $query->whereNotIn('id', $flattenedUsedIds);
+            })
             ->whereDoesntHave('observers', function ($q) use ($schedule) {
                 $q->whereHas('schedule', fn ($q) => $q
                     ->where('schedule_exam_date', $schedule->schedule_exam_date)
