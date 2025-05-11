@@ -73,27 +73,6 @@ class User extends Authenticatable
         ];
     }
 
-    // // app/Models/User.php
-    // public function getMaxObservers(): array
-    // {
-    //     $age = Carbon::parse($this->birth_date)->age;
-
-    //     return [
-    //         'daily' => match (true) {
-    //             $age >= 60 => 2,
-    //             $age >= 50 => 3,
-    //             $age >= 40 => 4,
-    //             default => 5
-    //         },
-    //         'total' => match (true) {
-    //             $age >= 60 => 6,
-    //             $age >= 50 => 10,
-    //             $age >= 40 => 12,
-    //             default => 18
-    //         },
-    //     ];
-    // }
-
     public function getMaxObserversByAge(): int
     {
         $age = Carbon::parse($this->birth_date)->age; // حساب العمر
@@ -117,36 +96,7 @@ class User extends Authenticatable
 
         return parent::delete();
     }
-    // public function getMaxObserversByAge()
-    // {
-    //     $age = Carbon::parse($this->birthdate)->age;
 
-    //     return match (true) {
-    //         $age >= 60 => 6,
-    //         $age >= 50 => 10,
-    //         $age >= 40 => 12,
-    //         default => 18
-    //     };
-    // }
-    // public function getAllowedAssignmentsAttribute()
-    // {
-    //     $age = $this->birth_date->age; // افتراض أن لديك `birth_date` في جدول المستخدمين
-
-    //     if ($age > 60) {
-    //         return 6;
-    //     } elseif ($age > 50) {
-    //         return 10;
-    //     } elseif ($age > 40) {
-    //         return 12;
-    //     } else {
-    //         return 18;
-    //     }
-    // }
-
-    // public function assignments()
-    // {
-    //     return $this->belongsToMany(Assignment::class, 'assignments_user', 'user_id', 'assignment_id');
-    // }
     // في النموذج User.php
     public function schedules()
     {
@@ -156,15 +106,17 @@ class User extends Authenticatable
     public function roles()
     {
         return $this->belongsToMany(Role::class, 'model_has_roles', 'model_id', 'role_id');
-        // ->where('model_type', User::class); // تأكد من أن model_type هو User
     }
 
     public function observers()
     {
         return $this->hasMany(Observer::class, 'user_id');
     }
-    // public function roles()
-    // {
-    //     return $this->belongsToMany(Role::class, 'model_has_roles', 'model_id', 'role_id');
-    // }
+
+    public function exceedsMaxObservers(): bool
+    {
+        $max = $this->getMaxObserversByAge();
+
+        return $this->observers()->count() >= $max;
+    }
 }

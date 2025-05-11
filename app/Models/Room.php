@@ -19,11 +19,6 @@ class Room extends Model
 
     const UPDATED_AT = 'room_updated_at';
 
-    // public function schedules()
-    // {
-    //     return $this->belongsToMany(Schedule::class, 'room_schedules', 'room_id', 'schedule_id');
-    // }
-
     public function getMaxObservers(): int
     {
         return $this->room_type === 'big' ? 8 : 4;

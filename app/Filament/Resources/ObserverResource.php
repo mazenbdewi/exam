@@ -253,24 +253,6 @@ class ObserverResource extends Resource
         ];
     }
 
-    // // دالة مساعدة لتعيين المراقب (كما هي)
-    // private static function assignObserver($user, $schedule, $room): bool
-    // {
-    //     try {
-    //         Observer::create([
-    //             'user_id' => $user->id,
-    //             'schedule_id' => $schedule->schedule_id,
-    //             'room_id' => $room->room_id,
-    //         ]);
-
-    //         return true;
-    //     } catch (\Exception $e) {
-    //         logger()->error("فشل تعيين المراقب: {$e->getMessage()}");
-
-    //         return false;
-    //     }
-    // }
-
     protected static $usedUserIds = [];
 
     public static function distributeByDates(array $datesOrder)

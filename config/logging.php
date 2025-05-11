@@ -52,6 +52,11 @@ return [
     */
 
     'channels' => [
+        'observer_distribution' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/observer-distribution.log'),
+            'level' => 'debug',
+        ],
         'stack' => [
             'driver' => 'stack',
             'channels' => ['single'],
