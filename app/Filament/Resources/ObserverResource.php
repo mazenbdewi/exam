@@ -136,6 +136,20 @@ class ObserverResource extends Resource
                 Tables\Columns\TextColumn::make('user.name')->label('الاسم'),
                 Tables\Columns\TextColumn::make('user.roles.name')->label('نوع المراقبة'),
                 Tables\Columns\TextColumn::make('schedule.schedule_subject')->label('المادة'),
+                Tables\Columns\TextColumn::make('schedule.schedule_academic_levels')
+                    ->label('السنة')
+                    ->sortable()
+                    ->searchable()
+                    ->getStateUsing(function ($record) {
+                        return match ($record->schedule_academic_levels) {
+                            'first' => 'سنة أولى',
+                            'second' => 'سنة ثانية',
+                            'third' => 'سنة ثالثة',
+                            'fourth' => 'سنة رابعة',
+                            'fifth' => 'سنة خامسة',
+                            default => 'غير معروفة',
+                        };
+                    }),
                 Tables\Columns\TextColumn::make('schedule.schedule_exam_date')->label('تاريخ الامتحان'),
                 Tables\Columns\TextColumn::make('schedule.schedule_time_slot')
                     ->label('الفترة')
