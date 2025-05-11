@@ -29,7 +29,7 @@ class ObserverDistributionService
             self::processSchedule($schedule);
         }
 
-        self::sendDistributionReport();
+        // self::sendDistributionReport();
     }
 
     private static function processSchedule(Schedule $schedule)
@@ -148,14 +148,14 @@ class ObserverDistributionService
         self::$usedUsers[$schedule->schedule_exam_date][] = $user->id;
     }
 
-    private static function sendDistributionReport()
-    {
-        $report = [
-            'total_assigned' => Observer::whereDate('observer_created_at', today())->count(),
-            'failed_assignments' => Log::channel('observer_distribution')->where('level', 'WARNING')->count(),
-        ];
+    // private static function sendDistributionReport()
+    // {
+    //     $report = [
+    //         'total_assigned' => Observer::whereDate('observer_created_at', today())->count(),
+    //         'failed_assignments' => Log::channel('observer_distribution')->where('level', 'WARNING')->count(),
+    //     ];
 
-        // إرسال الإشعار أو البريد الإلكتروني هنا
-        Log::info('Distribution completed: '.json_encode($report));
-    }
+    //     // إرسال الإشعار أو البريد الإلكتروني هنا
+    //     Log::info('Distribution completed: '.json_encode($report));
+    // }
 }
