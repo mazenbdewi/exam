@@ -141,14 +141,29 @@ class ObserverResource extends Resource
                     ->sortable()
                     ->searchable()
                     ->getStateUsing(function ($record) {
-                        return match ($record->schedule_academic_levels) {
+                        // 1. التحقق من وجود العلاقة والبيانات
+                        if (! $record->schedule || ! $record->schedule->schedule_academic_levels) {
+                            return 'غير معروفة';
+                        }
+
+                        // 2. تحويل القيمة إلى lowercase لتفادي مشاكل الحالة
+                        $level = strtolower($record->schedule->schedule_academic_levels);
+
+                        // 3. استخدام مصفوفة بديلة أكثر مرونة
+                        $levelsMap = [
                             'first' => 'سنة أولى',
                             'second' => 'سنة ثانية',
                             'third' => 'سنة ثالثة',
                             'fourth' => 'سنة رابعة',
                             'fifth' => 'سنة خامسة',
-                            default => 'غير معروفة',
-                        };
+                            '1' => 'سنة أولى',
+                            '2' => 'سنة ثانية',
+                            '3' => 'سنة ثالثة',
+                            '4' => 'سنة رابعة',
+                            '5' => 'سنة خامسة',
+                        ];
+
+                        return $levelsMap[$level] ?? 'غير معروفة';
                     }),
                 Tables\Columns\TextColumn::make('schedule.schedule_exam_date')->label('تاريخ الامتحان'),
                 Tables\Columns\TextColumn::make('schedule.schedule_time_slot')
