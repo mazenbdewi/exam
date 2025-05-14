@@ -10,7 +10,12 @@ class HeadsCountWidget extends BaseWidget
 {
     protected function getStats(): array
     {
-        $headsCount = User::where('roles.name', 'رئيس_قاعة')->count();
+        $headsCount = DB::table('users')
+            ->join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
+            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+            ->where('roles.name', 'head')
+            ->where('model_has_roles.model_type', User::class)
+            ->count();
 
         return [
             Stat::make('رؤساء القاعات', $headsCount)
