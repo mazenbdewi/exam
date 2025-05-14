@@ -3,7 +3,6 @@
 namespace App\Filament\Widgets;
 
 use App\Models\User;
-use DB;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -11,33 +10,36 @@ class StaffStatsWidget extends BaseWidget
 {
     protected function getStats(): array
     {
-        $roles = ['رئيس_قاعة', 'امين_سر', 'مراقب'];
+        $roles = [
+            'رئيس_قاعة' => 'primary',
+            'امين_سر' => 'success',
+            'مراقب' => 'warning',
+        ];
+
         $stats = [];
 
-        foreach ($roles as $role) {
-            $count = DB::table('users')
-                ->join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
-                ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-                ->where('roles.name', $role)
-                ->where('model_has_roles.model_type', User::class)
-                ->count();
+        foreach ($roles as $role => $color) {
+            $count = User::whereHas('roles', function ($query) use ($role) {
+                $query->where('name', $role);
+            })->count();
 
             $stats[] = Stat::make(
-                trans("roles.$role"), // استخدام ترجمة للأدوار
+                $role, // اسم الدور مباشرة (بدون ترجمة)
                 $count
-            )->color($this->getRoleColor($role));
+            )->color($color)
+                ->icon($this->getRoleIcon($role));
         }
 
         return $stats;
     }
 
-    private function getRoleColor(string $role): string
+    private function getRoleIcon(string $role): string
     {
         return match ($role) {
-            'رئيس_قاعة' => 'primary',
-            'امين_سر' => 'success',
-            'مراقب' => 'warning',
-            default => 'gray'
+            'رئيس_قاعة' => 'heroicon-o-user-circle',
+            'امين_سر' => 'heroicon-o-clipboard-document-list',
+            'مراقب' => 'heroicon-o-eye',
+            default => 'heroicon-o-users'
         };
     }
 }
