@@ -44,4 +44,9 @@ class Schedule extends Model
     {
         return $this->hasMany(Reservation::class, 'schedule_id', 'schedule_id');
     }
+
+    public function roomsCount()
+    {
+        return $this->rooms()->count();
+    }
 }
