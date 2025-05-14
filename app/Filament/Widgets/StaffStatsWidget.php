@@ -11,9 +11,9 @@ class StaffStatsWidget extends BaseWidget
     protected function getStats(): array
     {
         $roles = [
-            'رئيس_قاعة',
-            'امين_سر',
-            'مراقب',
+            'رئيس_قاعة' => 'primary',
+            'امين_سر' => 'success',
+            'مراقب' => 'warning',
         ];
 
         $stats = [];
@@ -26,7 +26,8 @@ class StaffStatsWidget extends BaseWidget
             $stats[] = Stat::make(
                 $role, // اسم الدور مباشرة (بدون ترجمة)
                 $count
-            );
+            )->color($color)
+                ->icon($this->getRoleIcon($role));
         }
 
         return $stats;
