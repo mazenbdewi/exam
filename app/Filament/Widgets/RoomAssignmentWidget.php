@@ -2,10 +2,11 @@
 
 namespace App\Filament\Widgets;
 
-use Filament\Widgets\Widget;
+use Filament\Widgets\StatsOverviewWidget as BaseWidget;
+use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Support\Facades\DB;
 
-class RoomAssignmentWidget extends Widget
+class RoomAssignmentWidget extends BaseWidget
 {
     protected function getStats(): array
     {
