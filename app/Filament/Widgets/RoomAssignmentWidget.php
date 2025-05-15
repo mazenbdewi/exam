@@ -18,8 +18,8 @@ class RoomAssignmentWidget extends Widget
         $schedules = Schedule::with(['rooms'])->get();
 
         // Step 2: جلب الكوادر حسب النوع
-        $presidents = User::where('user_type', 'رئيس')->get();
-        $secretaries = User::where('user_type', 'أمين سر')->get();
+        $presidents = User::where('user_type', 'رئيس_قاعة')->get();
+        $secretaries = User::where('user_type', 'امين_سر')->get();
         $monitors = User::where('user_type', 'مراقب')->get();
 
         // لتتبع الأشخاص الذين تم تعيينهم في نفس اليوم والتوقيت
