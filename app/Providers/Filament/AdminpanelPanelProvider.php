@@ -49,6 +49,7 @@ class AdminpanelPanelProvider extends PanelProvider
                 \App\Filament\Widgets\TotalRoomsWidget::class,
                 \App\Filament\Widgets\StaffStatsWidget::class,
                 \App\Filament\Widgets\TotalBigSmallRoomsWidget::class,
+                \App\Filament\Widgets\RoomAssignmentWidget::class,
 
             ])
             ->middleware([
