@@ -3,8 +3,8 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Schedule;
-use App\Models\User;
 use Filament\Widgets\Widget;
+use Illuminate\Support\Facades\DB;
 
 class RoomAssignmentWidget extends Widget
 {
@@ -18,9 +18,36 @@ class RoomAssignmentWidget extends Widget
         $schedules = Schedule::with(['rooms'])->get();
 
         // Step 2: جلب الكوادر حسب النوع
-        $presidents = User::where('user_type', 'رئيس_قاعة')->get();
-        $secretaries = User::where('user_type', 'امين_سر')->get();
-        $monitors = User::where('user_type', 'مراقب')->get();
+
+        $presidents = DB::table('users')
+            ->join('model_has_roles', function ($join) {
+                $join->on('users.id', '=', 'model_has_roles.model_id')
+                    ->where('model_has_roles.model_type', '=', 'App\\Models\\User');
+            })
+            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+            ->where('roles.name', 'رئيس_قاعة')
+            ->select('users.*')
+            ->get();
+
+        $secretaries = DB::table('users')
+            ->join('model_has_roles', function ($join) {
+                $join->on('users.id', '=', 'model_has_roles.model_id')
+                    ->where('model_has_roles.model_type', '=', 'App\\Models\\User');
+            })
+            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+            ->where('roles.name', 'امين_سر')
+            ->select('users.*')
+            ->get();
+
+        $monitors = DB::table('users')
+            ->join('model_has_roles', function ($join) {
+                $join->on('users.id', '=', 'model_has_roles.model_id')
+                    ->where('model_has_roles.model_type', '=', 'App\\Models\\User');
+            })
+            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+            ->where('roles.name', 'مراقب')
+            ->select('users.*')
+            ->get();
 
         // لتتبع الأشخاص الذين تم تعيينهم في نفس اليوم والتوقيت
         $assigned = [];
