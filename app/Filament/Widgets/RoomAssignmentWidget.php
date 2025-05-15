@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 class RoomAssignmentWidget extends Widget
 {
-    protected static string $view = 'filament.widgets.room-assignment-widget.blade';
+    protected static string $view = 'filament.widgets.room-assignment-widget';
 
     public function getViewData(): array
     {
