@@ -7,31 +7,27 @@ use Illuminate\Support\Facades\DB;
 
 class RoomAssignmentWidget extends Widget
 {
-    protected static string $view = 'filament.widgets.room-assignment-widget';
-
-    public function getViewData(): array
+    protected function getStats(): array
     {
-        // عدد القاعات المستخدمة حسب النوع
+        // 1. عدد القاعات الكبيرة والصغيرة المستخدمة
         $rooms = DB::table('room_schedules')
             ->join('rooms', 'room_schedules.room_id', '=', 'rooms.room_id')
             ->select('rooms.room_type', DB::raw('count(*) as total'))
             ->groupBy('rooms.room_type')
-            ->get()
             ->pluck('total', 'room_type');
 
         $bigRooms = $rooms['big'] ?? 0;
         $smallRooms = $rooms['small'] ?? 0;
 
-        // إجمالي الاحتياجات بناءً على عدد القاعات
+        // 2. تحديد العدد المطلوب حسب كل نوع مراقب
         $required = [
             'رئيس_قاعة' => $bigRooms + $smallRooms,
             'امين_سر' => ($bigRooms * 2) + ($smallRooms * 1),
             'مراقب' => ($bigRooms * 8) + ($smallRooms * 4),
         ];
 
-        // العدد المتاح فعليًا من قاعدة البيانات باستخدام Query Builder
+        // 3. عدد المتاح من المستخدمين المرتبطين بكل دور
         $available = [];
-
         foreach (['رئيس_قاعة', 'امين_سر', 'مراقب'] as $role) {
             $available[$role] = DB::table('users')
                 ->join('model_has_roles', function ($join) {
@@ -43,18 +39,47 @@ class RoomAssignmentWidget extends Widget
                 ->count();
         }
 
-        // تحديد النقص لكل دور
+        // 4. حساب النقص الإجمالي + تحديد إن كان النقص في الكبيرة أم الصغيرة
         $shortage = [];
-        foreach ($required as $role => $count) {
-            $shortage[$role] = max(0, $count - ($available[$role] ?? 0));
-        }
+        $details = [];
+
+        // توزيع النقص على نوع القاعات
+        $calcShortage = function ($totalNeeded, $availableNow, $bigUnit, $smallUnit) use ($bigRooms, $smallRooms) {
+            $bigNeed = $bigRooms * $bigUnit;
+            $smallNeed = $smallRooms * $smallUnit;
+            $shortage = max(0, $bigNeed + $smallNeed - $availableNow);
+
+            $bigShortage = max(0, $bigNeed - $availableNow);
+            $remaining = max(0, $availableNow - $bigNeed);
+            $smallShortage = max(0, $smallNeed - $remaining);
+
+            $where = [];
+            if ($bigShortage > 0) {
+                $where[] = 'في القاعات الكبيرة';
+            }
+            if ($smallShortage > 0) {
+                $where[] = 'في القاعات الصغيرة';
+            }
+
+            return [$shortage, implode(' و ', $where) ?: 'لا يوجد نقص'];
+        };
+
+        [$presidentShortage, $presidentWhere] = $calcShortage($required['رئيس_قاعة'], $available['رئيس_قاعة'], 1, 1);
+        [$secretaryShortage, $secretaryWhere] = $calcShortage($required['امين_سر'], $available['امين_سر'], 2, 1);
+        [$monitorShortage, $monitorWhere] = $calcShortage($required['مراقب'], $available['مراقب'], 8, 4);
 
         return [
-            'bigRooms' => $bigRooms,
-            'smallRooms' => $smallRooms,
-            'required' => $required,
-            'available' => $available,
-            'shortage' => $shortage,
+            Stat::make('رئيس القاعة', "{$available['رئيس_قاعة']} / {$required['رئيس_قاعة']}")
+                ->description("النقص: $presidentShortage - $presidentWhere")
+                ->color($presidentShortage > 0 ? 'danger' : 'success'),
+
+            Stat::make('أمين السر', "{$available['امين_سر']} / {$required['امين_سر']}")
+                ->description("النقص: $secretaryShortage - $secretaryWhere")
+                ->color($secretaryShortage > 0 ? 'warning' : 'success'),
+
+            Stat::make('المراقبون', "{$available['مراقب']} / {$required['مراقب']}")
+                ->description("النقص: $monitorShortage - $monitorWhere")
+                ->color($monitorShortage > 0 ? 'danger' : 'success'),
         ];
     }
 }
