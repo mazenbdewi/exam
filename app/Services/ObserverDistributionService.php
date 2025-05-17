@@ -6,156 +6,185 @@ use App\Models\Observer;
 use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\User;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 
 class ObserverDistributionService
 {
-    protected static $usedUsers = [];
+    protected static array $usedUserIds = [];
 
-    protected static $currentDate;
+    protected static array $scheduleQueue = [];
 
-    public static function distributeObservers()
+    public static function distributeObservers(): void
     {
-        $schedules = Schedule::with(['rooms' => function ($query) {
-            $query->orderByDesc('room_capacity_total')
-                ->withCount(['observers as current_observers']);
-        }])
+        Observer::truncate();
+        self::resetStaticState();
+        self::prepareScheduleQueue();
+        self::processSchedulesInOrder();
+    }
+
+    private static function resetStaticState(): void
+    {
+        self::$usedUserIds = [];
+        self::$scheduleQueue = [];
+    }
+
+    private static function prepareScheduleQueue(): void
+    {
+        self::$scheduleQueue = Schedule::with([
+            'rooms' => function ($q) {
+                $q->with(['observers']); // فقط جلب المراقبين بدون soft delete
+            },
+        ])
             ->orderBy('schedule_exam_date')
             ->orderBy('schedule_time_slot')
-            ->get();
+            ->get()
+            ->all();
+    }
 
-        foreach ($schedules as $schedule) {
-            self::$currentDate = $schedule->schedule_exam_date;
+    private static function processSchedulesInOrder(): void
+    {
+        foreach (self::$scheduleQueue as $schedule) {
             self::processSchedule($schedule);
-        }
-
-        // self::sendDistributionReport();
-    }
-
-    private static function processSchedule(Schedule $schedule)
-    {
-        Log::channel('observer_distribution')->info("Processing schedule: {$schedule->schedule_subject} - {$schedule->schedule_exam_date}");
-
-        foreach ($schedule->rooms as $room) {
-            if (self::isRoomFull($room)) {
-                Log::debug("Room {$room->room_name} is already full");
-
-                continue;
-            }
-
-            self::fillRoom($room, $schedule);
+            self::markUsedObservers($schedule);
         }
     }
 
-    private static function isRoomFull(Room $room): bool
+    private static function processSchedule(Schedule $schedule): void
     {
-        $maxCapacity = $room->room_type === 'big' ? 11 : 6;
+        $schedule->load([
+            'rooms.observers.user.roles',
+            'rooms.schedules' => fn ($q) => $q->orderBy('schedule_exam_date'),
+        ]);
 
-        return $room->current_observers >= $maxCapacity;
+        $schedule->rooms->each(function (Room $room) use ($schedule) {
+            self::processRoomAllocation($room, $schedule);
+            self::processRoomObservers($room, $schedule);
+        });
     }
 
-    private static function fillRoom(Room $room, Schedule $schedule)
+    private static function processRoomAllocation(Room $room, Schedule $schedule): void
     {
-        $requiredRoles = self::calculateRequiredRoles($room);
-
-        foreach ($requiredRoles as $role => $requiredCount) {
-            for ($i = 0; $i < $requiredCount; $i++) {
-                $user = self::findBestUserForRole($role, $schedule, $room);
-
-                if ($user && self::assignUserToRoom($user, $schedule, $room)) {
-                    self::markUserAsUsed($user, $schedule);
-                    Log::info("Assigned {$user->name} ({$role}) to {$room->room_name}");
-                }
-            }
-        }
-    }
-
-    private static function calculateRequiredRoles(Room $room): array
-    {
-        $existing = [
-            'رئيس_قاعة' => $room->observers()->whereHas('user.roles', fn ($q) => $q->where('name', 'رئيس_قاعة'))->count(),
-            'امين_سر' => $room->observers()->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'))->count(),
-            'مراقب' => $room->observers()->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'))->count(),
-        ];
-
-        return [
-            'رئيس_قاعة' => max(1 - $existing['رئيس_قاعة'], 0),
-            'امين_سر' => max(($room->room_type === 'big' ? 2 : 1) - $existing['امين_سر'], 0),
-            'مراقب' => self::calculateRemainingCapacity($room, $existing),
-        ];
-    }
-
-    private static function calculateRemainingCapacity(Room $room, array $existing): int
-    {
-        $maxCapacity = $room->room_type === 'big' ? 11 : 6;
-        $occupied = $existing['رئيس_قاعة'] + $existing['امين_سر'] + $existing['مراقب'];
-
-        return max($maxCapacity - $occupied - 1, 0);
-    }
-
-    private static function findBestUserForRole(string $role, Schedule $schedule, Room $room): ?User
-    {
-        $flattenedUsedIds = collect(self::$usedUsers)
-            ->flatten()
-            ->unique()
-            ->values()
-            ->toArray();
-
-        // 2. استخدام whereNotIn مع المصفوفة المسطحة
-        return User::whereHas('roles', fn ($q) => $q->where('name', $role))
-            ->when(! empty($flattenedUsedIds), function ($query) use ($flattenedUsedIds) {
-                $query->whereNotIn('id', $flattenedUsedIds);
-            })
-            ->whereDoesntHave('observers', function ($q) use ($schedule) {
-                $q->whereHas('schedule', fn ($q) => $q
-                    ->where('schedule_exam_date', $schedule->schedule_exam_date)
-                    ->where('schedule_time_slot', $schedule->schedule_time_slot)
-                );
-            })
-            ->withCount(['observers' => function ($q) {
-                $q->whereDate('observer_created_at', self::$currentDate);
-            }])
-            ->orderBy('observers_count')
-            ->orderByDesc('birth_date')
+        $roomSchedule = $room->schedules()
+            ->where('room_schedules.schedule_id', $schedule->schedule_id)
             ->first();
-    }
 
-    private static function assignUserToRoom(User $user, Schedule $schedule, Room $room): bool
-    {
-        try {
-            if ($user->exceedsMaxObservers()) {
-                Log::warning("User {$user->name} exceeded max observers limit");
+        if (! $roomSchedule || ! $roomSchedule->pivot || $roomSchedule->pivot->allocated_seats === 0) {
+            $sharedCount = $room->schedules()
+                ->where('schedule_time_slot', $schedule->schedule_time_slot)
+                ->where('schedule_exam_date', $schedule->schedule_exam_date)
+                ->count();
 
-                return false;
-            }
+            $allocatedSeats = $sharedCount > 0
+                ? (int) floor($room->capacity / $sharedCount)
+                : $room->capacity;
 
-            Observer::create([
-                'user_id' => $user->id,
-                'schedule_id' => $schedule->schedule_id,
-                'room_id' => $room->room_id,
+            $allocatedMonitors = $sharedCount > 0
+                ? (int) ceil(self::getBaseMonitors($room) / $sharedCount)
+                : self::getBaseMonitors($room);
+
+            $room->schedules()->syncWithoutDetaching([
+                $schedule->schedule_id => [
+                    'allocated_seats' => $allocatedSeats,
+                    'allocated_monitors' => $allocatedMonitors,
+                ],
             ]);
-
-            return true;
-        } catch (\Exception $e) {
-            Log::error("Assignment failed: {$e->getMessage()}");
-
-            return false;
         }
     }
 
-    private static function markUserAsUsed(User $user, Schedule $schedule)
+    private static function processRoomObservers(Room $room, Schedule $schedule): void
     {
-        self::$usedUsers[$schedule->schedule_exam_date][] = $user->id;
+        $roomSchedule = $room->schedules()
+            ->where('room_schedules.schedule_id', $schedule->schedule_id)
+            ->first();
+
+        $requirements = [
+            'رئيس_قاعة' => 1,
+            'امين_سر' => $room->room_type === 'big' ? 2 : 1,
+            'مراقب' => $roomSchedule->pivot->allocated_monitors ?? 0,
+        ];
+
+        $existingCounts = $room->observers()
+            ->where('schedule_id', $schedule->schedule_id)
+            ->get()
+            ->groupBy(fn ($o) => $o->user->getRoleNames()->first())
+            ->map->count();
+
+        $eligibleUsers = self::getEligibleUsers($schedule);
+
+        foreach ($requirements as $role => $required) {
+            $needed = max($required - ($existingCounts[$role] ?? 0), 0);
+            self::assignObservers($role, $needed, $eligibleUsers, $room, $schedule);
+        }
     }
 
-    // private static function sendDistributionReport()
-    // {
-    //     $report = [
-    //         'total_assigned' => Observer::whereDate('observer_created_at', today())->count(),
-    //         'failed_assignments' => Log::channel('observer_distribution')->where('level', 'WARNING')->count(),
-    //     ];
+    private static function getEligibleUsers(Schedule $schedule): Collection
+    {
+        return User::whereHas('roles', fn ($q) => $q->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']))
+            ->whereNotIn('id', self::$usedUserIds)
+            ->with(['observers' => fn ($q) => $q->whereHas('schedule', fn ($q) => $q->where([
+                ['schedule_exam_date', $schedule->schedule_exam_date],
+                ['schedule_time_slot', $schedule->schedule_time_slot],
+            ]))])
+            ->get()
+            ->filter(fn (User $user) => $user->observers->count() < $user->getMaxObserversByAge())
+            ->sortByDesc(fn (User $user) => self::getRolePriority($user));
+    }
 
-    //     // إرسال الإشعار أو البريد الإلكتروني هنا
-    //     Log::info('Distribution completed: '.json_encode($report));
-    // }
+    private static function assignObservers(
+        string $role,
+        int $needed,
+        Collection $eligibleUsers,
+        Room $room,
+        Schedule $schedule
+    ): void {
+        $eligibleUsers->filter(fn (User $u) => $u->hasRole($role))
+            ->take($needed)
+            ->each(function (User $user) use ($room, $schedule) {
+                // التحقق من التعارضات بشكل أكثر دقة
+                if (! self::hasConflict($user, $schedule) && ! in_array($user->id, self::$usedUserIds)) {
+                    Observer::firstOrCreate([
+                        'user_id' => $user->id,
+                        'schedule_id' => $schedule->schedule_id,
+                        'room_id' => $room->room_id,
+                    ]);
+                    self::$usedUserIds[] = $user->id;
+                }
+            });
+    }
+
+    private static function markUsedObservers(Schedule $schedule): void
+    {
+        $newUsedIds = Observer::whereHas('schedule', fn ($q) => $q->where([
+            ['schedule_exam_date', $schedule->schedule_exam_date],
+            ['schedule_time_slot', $schedule->schedule_time_slot],
+        ]))->pluck('user_id')->unique();
+
+        self::$usedUserIds = array_unique(
+            array_merge(self::$usedUserIds, $newUsedIds->toArray())
+        );
+    }
+
+    private static function hasConflict(User $user, Schedule $schedule): bool
+    {
+        return Observer::where('user_id', $user->id)
+            ->whereHas('schedule', fn ($q) => $q->where([
+                ['schedule_exam_date', $schedule->schedule_exam_date],
+                ['schedule_time_slot', $schedule->schedule_time_slot],
+            ]))->exists();
+    }
+
+    // الدوال المساعدة
+    private static function getRolePriority(User $user): int
+    {
+        return match (true) {
+            $user->hasRole('رئيس_قاعة') => 3,
+            $user->hasRole('امين_سر') => 2,
+            default => 1,
+        };
+    }
+
+    private static function getBaseMonitors(Room $room): int
+    {
+        return $room->room_type === 'big' ? 8 : 4;
+    }
 }

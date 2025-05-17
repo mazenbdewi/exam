@@ -32,7 +32,8 @@ class Schedule extends Model
 
     public function rooms()
     {
-        return $this->belongsToMany(Room::class, 'room_schedules', 'schedule_id', 'room_id');
+        return $this->belongsToMany(Room::class, 'room_schedules', 'schedule_id', 'room_id')
+            ->withPivot(['allocated_seats', 'allocated_monitors']);
     }
 
     public function users()
@@ -48,5 +49,28 @@ class Schedule extends Model
     public function roomsCount()
     {
         return $this->rooms()->count();
+    }
+
+    public function conflictingRooms()
+    {
+        return $this->belongsToMany(Room::class, 'room_schedules', 'schedule_id', 'room_id')
+            ->withPivot('allocated_seats')
+            ->using(RoomSchedule::class);
+    }
+
+    public function getSharedRoomRequirementsAttribute()
+    {
+        return $this->rooms->map(function ($room) {
+            $sharedMaterials = $room->schedules()
+                ->where('schedule_time_slot', $this->schedule_time_slot)
+                ->where('schedule_exam_date', $this->schedule_exam_date)
+                ->count();
+
+            return [
+                'room_id' => $room->id,
+                'shared_with' => $sharedMaterials,
+                'required_monitors' => ceil(($room->room_type === 'big' ? 8 : 4) / $sharedMaterials),
+            ];
+        });
     }
 }

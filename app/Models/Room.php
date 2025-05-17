@@ -49,6 +49,7 @@ class Room extends Model
     // في موديل Room (App\Models\Room)
     public function schedules()
     {
-        return $this->belongsToMany(Schedule::class, 'room_schedules', 'room_id', 'schedule_id');
+        return $this->belongsToMany(Schedule::class, 'room_schedules', 'room_id', 'schedule_id')
+            ->withPivot(['allocated_seats', 'allocated_monitors']);
     }
 }
