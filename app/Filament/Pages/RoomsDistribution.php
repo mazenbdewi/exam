@@ -29,65 +29,53 @@ class RoomsDistribution extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(
-                Room::query()
-                    ->has('schedules')
-                    ->with('observers.user')
+            ->query(function () {
+                return \App\Models\Room::query()
+                    ->select('rooms.*')
+                    ->join('room_schedules', 'rooms.room_id', '=', 'room_schedules.room_id')
+                    ->join('schedules', 'room_schedules.schedule_id', '=', 'schedules.schedule_id')
                     ->with(['schedules' => function ($query) {
                         $query->select(
                             'schedules.schedule_id',
                             'schedules.schedule_subject',
-                            'schedules.schedule_exam_date',
-                            'schedules.schedule_time_slot'
+                            'schedules.schedule_time_slot',
+                            'schedules.schedule_exam_date'
                         );
                     }])
+                    ->with(['observers.user.roles'])
                     ->withCount([
                         'observers as president_count' => fn ($q) => $q->whereHas('user.roles', fn ($q) => $q->where('name', 'رئيس_قاعة')),
                         'observers as secretary_count' => fn ($q) => $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر')),
                         'observers as observer_count' => fn ($q) => $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب')),
-                    ])
-            )
+                    ]);
+            })
             ->columns([
                 TextColumn::make('room_name')
-                    ->label('اسم القاعة')
-                    ->searchable()
-                    ->sortable(),
+                    ->label('اسم القاعة'),
 
-                // العمود الجديد لنوع القاعة
                 TextColumn::make('room_type')
                     ->label('نوع القاعة')
-                    ->formatStateUsing(fn (string $state) => match ($state) {
-                        'big' => 'كبيرة',
-                        'small' => 'صغيرة',
-                        default => 'غير محدد',
-                    })
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'big' => 'success',
-                        'small' => 'warning',
-                        default => 'gray',
-                    }),
+                    ->formatStateUsing(fn ($state) => $state === 'big' ? 'كبيرة' : 'صغيرة'),
 
                 TextColumn::make('schedules.schedule_subject')
-                    ->label('المواد')
-                    ->formatStateUsing(function (Room $record) {
-                        return $record->schedules
-                            ->map(fn ($s) => $s->schedule_subject.' ('.($s->schedule_time_slot === 'morning' ? 'صباحية' : 'مسائية').')')
-                            ->join(', ');
+                    ->label('المادة')
+                    ->formatStateUsing(function ($record) {
+                        return $record->schedules->map(fn ($s) => $s->schedule_subject)->join(', ');
+                    }),
+
+                TextColumn::make('schedules.schedule_time_slot')
+                    ->label('الفترة')
+                    ->formatStateUsing(function ($record) {
+                        return $record->schedules->map(fn ($s) => $s->schedule_time_slot === 'morning' ? 'صباحية' : 'مسائية'
+                        )->join(', ');
                     }),
 
                 TextColumn::make('schedules.schedule_exam_date')
                     ->label('تاريخ الامتحان')
-                    ->formatStateUsing(function (Room $record) {
-                        return $record->schedules
-                            ->pluck('schedule_exam_date')
-                            ->unique()
-                            ->map(function ($date) {
-                                return \Carbon\Carbon::parse($date)->format('Y-m-d');
-                            })
-                            ->join(', ');
-                    })
-                    ->sortable(),
+                    ->formatStateUsing(function ($record) {
+                        return $record->schedules->map(fn ($s) => \Carbon\Carbon::parse($s->schedule_exam_date)->format('Y-m-d')
+                        )->join(', ');
+                    }),
 
                 TextColumn::make('current_staff')
                     ->label('الموظفون الموزعون')
@@ -106,16 +94,19 @@ class RoomsDistribution extends Page implements HasTable
 
                         $shortage = [];
 
+                        // حساب النقص للرئيس
                         $presidentShortage = max($required['رئيس'] - $record->president_count, 0);
                         if ($presidentShortage > 0) {
                             $shortage[] = "رئيس: {$presidentShortage}";
                         }
 
+                        // حساب النقص لأمين السر
                         $secretaryShortage = max($required['أمين سر'] - $record->secretary_count, 0);
                         if ($secretaryShortage > 0) {
                             $shortage[] = "أمين سر: {$secretaryShortage}";
                         }
 
+                        // حساب النقص للمراقبين
                         $observerShortage = max($required['مراقب'] - $record->observer_count, 0);
                         if ($observerShortage > 0) {
                             $shortage[] = "مراقب: {$observerShortage}";
@@ -143,21 +134,24 @@ class RoomsDistribution extends Page implements HasTable
                     ->state('عرض')
                     ->action(
                         Action::make('viewStaff')
-                            ->modalHeading(fn (Room $record) => "الموظفون في {$record->room_name}")
-                            ->modalContent(fn (Room $record) => view('filament.tables.actions.staff-list', [
-                                'groupedStaff' => $record->observers()
-                                    ->with('user.roles')
-                                    ->get()
-                                    ->sortByDesc(fn ($observer) => $this->getRolePriority($observer->user))
-                                    ->groupBy(fn ($observer) => $observer->user->getRoleNames()->first()),
-                            ]))
+                            ->modalHeading(fn ($record) => "الموظفون في {$record->room_name}")
+                            ->modalContent(function ($record) {
+                                $room = Room::find($record->room_id);
+
+                                return view('filament.tables.actions.staff-list', [
+                                    'groupedStaff' => $room->observers()
+                                        ->with('user.roles')
+                                        ->get()
+                                        ->sortByDesc(fn ($observer) => $this->getRolePriority($observer->user))
+                                        ->groupBy(fn ($observer) => $observer->user->getRoleNames()->first()),
+                                ]);
+                            })
                             ->modalWidth('2xl')
                             ->modalSubmitAction(false)
                             ->modalCancelActionLabel('إغلاق')
-                    )->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        default => 'success',
-                    }),
+                    )
+                    ->badge()
+                    ->color('success'),
             ])
             ->filters([
                 SelectFilter::make('room_type')
@@ -166,7 +160,7 @@ class RoomsDistribution extends Page implements HasTable
                         'big' => 'كبيرة',
                         'small' => 'صغيرة',
                     ])
-                    ->attribute('room_type'),
+                    ->column('room_type'),
             ]);
     }
 

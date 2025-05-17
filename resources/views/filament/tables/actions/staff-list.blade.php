@@ -6,7 +6,7 @@
             @case('رئيس_قاعة') رئيس القاعة @break
             @case('امين_سر') أمناء السر @break
             @case('مراقب') المراقبون @break
-            @default دور غير محدد
+            @default {{ $role }}
             @endswitch
             <span class="text-gray-500 text-sm">({{ $staffGroup->count() }})</span>
         </h3>
