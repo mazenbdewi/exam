@@ -33,7 +33,8 @@ class ObserverDistributionService
     {
         return Schedule::query()
             ->with(['rooms' => function ($q) {
-                $q->orderBy('room_type')->orderBy('room_id');
+                $q->orderByRaw("CASE WHEN room_type = 'small' THEN 0 ELSE 1 END")
+                    ->orderBy('room_id');
             }])
             ->orderBy('schedule_exam_date')
             ->orderBy('schedule_time_slot')
@@ -50,7 +51,7 @@ class ObserverDistributionService
         foreach ($sortedRooms as $room) {
             self::allocateRoomResources($room, $schedule);
             if (! self::isRoomFullyStaffed($room, $schedule)) {
-                logger()->warning("⚠️ لم يتم تعيين العدد الكافي من الموظفين للقاعة {$room->room_name} في الجدول رقم {$schedule->schedule_id}");
+                logger()->warning("⚠️ لم يتم تعيين العدد الكافي للقاعة {$room->room_name} في الجدول {$schedule->schedule_id}");
             }
         }
         self::markUsedObserversForSchedule($schedule);
@@ -107,45 +108,80 @@ class ObserverDistributionService
 
         $eligibleUsers = self::getEligibleUsersForSchedule($schedule);
 
-        foreach ($requirements as $role => $required) {
-            $needed = max($required - ($existingCounts[$role] ?? 0), 0);
-            if ($needed > 0) {
-                self::assignObserversToRoom($role, $needed, $eligibleUsers, $room, $schedule);
-                self::markUsedObserversForSchedule($schedule);
-            }
-        }
+        // تعيين رئيس القاعة أولاً
+        self::assignRoleWithPriority(
+            'رئيس_قاعة',
+            $requirements['رئيس_قاعة'],
+            $eligibleUsers,
+            $room,
+            $schedule
+        );
+
+        // تعيين أمين السر ثانياً
+        self::assignRoleWithPriority(
+            'امين_سر',
+            $requirements['امين_سر'],
+            $eligibleUsers,
+            $room,
+            $schedule
+        );
+
+        // تعيين المراقبين أخيراً
+        self::assignRoleWithPriority(
+            'مراقب',
+            $requirements['مراقب'],
+            $eligibleUsers,
+            $room,
+            $schedule,
+            true // السماح باستخدام أمين السر إذا لزم الأمر
+        );
     }
 
-    private static function assignObserversToRoom(
+    private static function assignRoleWithPriority(
         string $role,
         int $needed,
         Collection $eligibleUsers,
         Room $room,
-        Schedule $schedule
+        Schedule $schedule,
+        bool $allowSecretaryFallback = false
     ): void {
+        $existing = $room->observers()
+            ->where('schedule_id', $schedule->schedule_id)
+            ->whereHas('user', fn ($q) => $q->whereHas('roles', fn ($q) => $q->where('name', $role)))
+            ->count();
+
+        $needed = max($needed - $existing, 0);
+        if ($needed === 0) {
+            return;
+        }
+
         $candidates = $eligibleUsers->filter(fn (User $u) => $u->hasRole($role));
 
-        if ($candidates->count() < $needed && $role === 'مراقب') {
+        if ($allowSecretaryFallback && $role === 'مراقب' && $candidates->count() < $needed) {
             $candidates = $eligibleUsers->filter(fn (User $u) => $u->hasRole('امين_سر'));
         }
 
-        $availableCandidates = $candidates->filter(fn (User $user) => ! self::hasConflict($user, $schedule, $room->id))
-            ->unique('id');
+        $available = $candidates
+            ->reject(fn (User $u) => in_array($u->id, self::$usedUserIds))
+            ->filter(fn (User $u) => ! self::hasConflict($u, $schedule, $room->id))
+            ->unique('id')
+            ->take($needed);
 
-        $selected = $availableCandidates->take($needed);
-
-        foreach ($selected as $user) {
+        foreach ($available as $user) {
             Observer::create([
                 'user_id' => $user->id,
                 'schedule_id' => $schedule->schedule_id,
                 'room_id' => $room->room_id,
             ]);
+
+            self::$usedUserIds[] = $user->id;
+            self::$usedUserIds = array_unique(self::$usedUserIds);
         }
     }
 
     private static function getEligibleUsersForSchedule(Schedule $schedule): Collection
     {
-        return User::whereHas('roles', fn ($q) => $q->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']))
+        return User::whereHas('roles', fn ($q) => $q->whereIn('name', ['رئيس_قاعة', 'امين_سر', 'مراقب']))
             ->whereNotIn('id', self::$usedUserIds)
             ->with(['observers' => function ($q) use ($schedule) {
                 $q->whereHas('schedule', fn ($q) => $q->where([
@@ -172,20 +208,20 @@ class ObserverDistributionService
 
     private static function isRoomFullyStaffed(Room $room, Schedule $schedule): bool
     {
-        $requirements = [
+        $required = [
             'رئيس_قاعة' => 1,
             'امين_سر' => $room->room_type === 'big' ? 2 : 1,
             'مراقب' => self::getBaseMonitors($room),
         ];
 
-        $existingCounts = $room->observers()
+        $current = $room->observers()
             ->where('schedule_id', $schedule->schedule_id)
             ->get()
             ->groupBy(fn ($o) => $o->user->getRoleNames()->first())
             ->map->count();
 
-        foreach ($requirements as $role => $count) {
-            if (($existingCounts[$role] ?? 0) < $count) {
+        foreach ($required as $role => $count) {
+            if (($current[$role] ?? 0) < $count) {
                 return false;
             }
         }
@@ -193,26 +229,23 @@ class ObserverDistributionService
         return true;
     }
 
-    private static function hasConflict(User $user, Schedule $schedule, ?int $currentRoomId = null): bool
+    private static function hasConflict(User $user, Schedule $schedule, ?int $roomId = null): bool
     {
-        return Observer::query()
-            ->where('user_id', $user->id)
-            ->whereHas('schedule', function ($q) use ($schedule) {
-                $q->where('schedule_exam_date', $schedule->schedule_exam_date)
-                    ->where('schedule_time_slot', $schedule->schedule_time_slot);
-            })
-            ->when($currentRoomId !== null, function ($q) use ($currentRoomId) {
-                $q->where('room_id', '!=', $currentRoomId);
-            })
+        return Observer::where('user_id', $user->id)
+            ->whereHas('schedule', fn ($q) => $q->where([
+                ['schedule_exam_date', $schedule->schedule_exam_date],
+                ['schedule_time_slot', $schedule->schedule_time_slot],
+            ]))
+            ->when($roomId, fn ($q) => $q->where('room_id', '!=', $roomId))
             ->exists();
     }
 
     private static function getRolePriority(User $user): int
     {
-        return match (true) {
-            $user->hasRole('رئيس_قاعة') => 3,
-            $user->hasRole('امين_سر') => 2,
-            default => 1,
+        return match ($user->getRoleNames()->first()) {
+            'رئيس_قاعة' => 3,
+            'امين_سر' => 2,
+            default => 1
         };
     }
 
