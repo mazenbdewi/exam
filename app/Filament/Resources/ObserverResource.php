@@ -209,7 +209,6 @@ class ObserverResource extends Resource
                     ->color('primary')
                     ->hidden(fn () => ! auth()->user()->hasRole('super_admin'))
                     ->action(function () {
-                        // static::distributeObservers();
                         ObserverDistributionService::distributeObservers();
 
                     }),
