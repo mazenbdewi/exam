@@ -28,18 +28,18 @@ class ObserverDistributionService
         self::$scheduleQueue = [];
     }
 
-    private static function prepareScheduleQueue(): void
-    {
-        self::$scheduleQueue = Schedule::with([
-            'rooms' => function ($q) {
-                $q->with(['observers']); // فقط جلب المراقبين بدون soft delete
-            },
-        ])
-            ->orderBy('schedule_exam_date')
-            ->orderBy('schedule_time_slot')
-            ->get()
-            ->all();
-    }
+    // private static function prepareScheduleQueue(): void
+    // {
+    //     self::$scheduleQueue = Schedule::with([
+    //         'rooms' => function ($q) {
+    //             $q->with(['observers']); // فقط جلب المراقبين بدون soft delete
+    //         },
+    //     ])
+    //         ->orderBy('schedule_exam_date')
+    //         ->orderBy('schedule_time_slot')
+    //         ->get()
+    //         ->all();
+    // }
 
     private static function processSchedulesInOrder(): void
     {
@@ -49,18 +49,18 @@ class ObserverDistributionService
         }
     }
 
-    private static function processSchedule(Schedule $schedule): void
-    {
-        $schedule->load([
-            'rooms.observers.user.roles',
-            'rooms.schedules' => fn ($q) => $q->orderBy('schedule_exam_date'),
-        ]);
+    // private static function processSchedule(Schedule $schedule): void
+    // {
+    //     $schedule->load([
+    //         'rooms.observers.user.roles',
+    //         'rooms.schedules' => fn ($q) => $q->orderBy('schedule_exam_date'),
+    //     ]);
 
-        $schedule->rooms->each(function (Room $room) use ($schedule) {
-            self::processRoomAllocation($room, $schedule);
-            self::processRoomObservers($room, $schedule);
-        });
-    }
+    //     $schedule->rooms->each(function (Room $room) use ($schedule) {
+    //         self::processRoomAllocation($room, $schedule);
+    //         self::processRoomObservers($room, $schedule);
+    //     });
+    // }
 
     private static function processRoomAllocation(Room $room, Schedule $schedule): void
     {
@@ -117,17 +117,65 @@ class ObserverDistributionService
         }
     }
 
+    // private static function getEligibleUsers(Schedule $schedule): Collection
+    // {
+    //     return User::whereHas('roles', fn ($q) => $q->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']))
+    //         ->whereNotIn('id', self::$usedUserIds)
+    //         ->with(['observers' => fn ($q) => $q->whereHas('schedule', fn ($q) => $q->where([
+    //             ['schedule_exam_date', $schedule->schedule_exam_date],
+    //             ['schedule_time_slot', $schedule->schedule_time_slot],
+    //         ]))])
+    //         ->get()
+    //         ->filter(fn (User $user) => $user->observers->count() < $user->getMaxObserversByAge())
+    //         ->sortByDesc(fn (User $user) => self::getRolePriority($user));
+    // }
+
+    private static function prepareScheduleQueue(): void
+    {
+        self::$scheduleQueue = Schedule::query()
+            ->with(['rooms' => function ($q) {
+                $q->orderBy('room_id'); // إضافة ترتيب القاعات
+            }])
+            ->orderBy('schedule_exam_date')
+            ->orderBy('schedule_time_slot')
+            ->get()
+            ->all();
+    }
+
+    private static function processSchedule(Schedule $schedule): void
+    {
+        $schedule->load([
+            'rooms' => function ($q) {
+                $q->orderBy('room_id'); // ترتيب القاعات داخل الجدول الزمني
+            },
+            'rooms.observers.user.roles',
+        ]);
+
+        // معالجة القاعات بالترتيب بعد الفرز
+        $schedule->rooms
+            ->sortBy('room_id')
+            ->each(function (Room $room) use ($schedule) {
+                self::processRoomAllocation($room, $schedule);
+                self::processRoomObservers($room, $schedule);
+            });
+    }
+
     private static function getEligibleUsers(Schedule $schedule): Collection
     {
         return User::whereHas('roles', fn ($q) => $q->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']))
             ->whereNotIn('id', self::$usedUserIds)
-            ->with(['observers' => fn ($q) => $q->whereHas('schedule', fn ($q) => $q->where([
-                ['schedule_exam_date', $schedule->schedule_exam_date],
-                ['schedule_time_slot', $schedule->schedule_time_slot],
-            ]))])
+            ->with(['observers' => function ($q) use ($schedule) {
+                $q->whereHas('schedule', fn ($q) => $q->where([
+                    ['schedule_exam_date', $schedule->schedule_exam_date],
+                    ['schedule_time_slot', $schedule->schedule_time_slot],
+
+                ]));
+            }])
             ->get()
-            ->filter(fn (User $user) => $user->observers->count() < $user->getMaxObserversByAge())
-            ->sortByDesc(fn (User $user) => self::getRolePriority($user));
+            ->sortByDesc(function (User $user) {
+                return ($user->observers->count() === 0 ? 1000 : 0)
+                    + self::getRolePriority($user);
+            });
     }
 
     private static function assignObservers(
