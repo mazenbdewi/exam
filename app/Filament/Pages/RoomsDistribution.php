@@ -2,7 +2,7 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\Room;
+use App\Models\RoomSchedule;
 use App\Models\User;
 use Filament\Pages\Page;
 use Filament\Tables\Actions\Action;
@@ -30,122 +30,134 @@ class RoomsDistribution extends Page implements HasTable
     {
         return $table
             ->query(function () {
-                return \App\Models\Room::query()
-                    ->select('rooms.*')
-                    ->join('room_schedules', 'rooms.room_id', '=', 'room_schedules.room_id')
-                    ->join('schedules', 'room_schedules.schedule_id', '=', 'schedules.schedule_id')
-                    ->with(['schedules' => function ($query) {
-                        $query->select(
-                            'schedules.schedule_id',
-                            'schedules.schedule_subject',
-                            'schedules.schedule_time_slot',
-                            'schedules.schedule_exam_date'
-                        );
-                    }])
-                    ->with(['observers.user.roles'])
+                return RoomSchedule::query() // <-- إزالة الدالة query() الإضافية
+                    ->with([
+                        'room.observers.user.roles',
+                        'schedule',
+                    ])
                     ->withCount([
-                        'observers as president_count' => fn ($q) => $q->whereHas('user.roles', fn ($q) => $q->where('name', 'رئيس_قاعة')),
-                        'observers as secretary_count' => fn ($q) => $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر')),
-                        'observers as observer_count' => fn ($q) => $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب')),
+                        'roomObservers as president_count' => function ($q) {
+                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'رئيس_قاعة'));
+                        },
+                        'roomObservers as secretary_count' => function ($q) {
+                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
+                        },
+                        'roomObservers as observer_count' => function ($q) {
+                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
+                        },
                     ]);
             })
             ->columns([
-                TextColumn::make('room_name')
-                    ->label('اسم القاعة'),
+                // اسم القاعة
+                TextColumn::make('room.room_name')
+                    ->label('اسم القاعة')
+                    ->searchable()
+                    ->sortable(),
 
-                TextColumn::make('room_type')
+                // نوع القاعة
+                TextColumn::make('room.room_type')
                     ->label('نوع القاعة')
-                    ->formatStateUsing(fn ($state) => $state === 'big' ? 'كبيرة' : 'صغيرة'),
+                    ->formatStateUsing(fn ($state) => match ($state) {
+                        'big' => 'كبيرة',
+                        'small' => 'صغيرة',
+                        default => 'غير محدد'
+                    })
+                    ->badge()
+                    ->color(fn ($state) => match ($state) {
+                        'big' => 'success',
+                        'small' => 'warning',
+                        default => 'gray'
+                    }),
 
-                TextColumn::make('schedules.schedule_subject')
+                // المادة
+                TextColumn::make('schedule.schedule_subject')
                     ->label('المادة')
-                    ->formatStateUsing(function ($record) {
-                        return $record->schedules->map(fn ($s) => $s->schedule_subject)->join(', ');
-                    }),
+                    ->searchable()
+                    ->sortable(),
 
-                TextColumn::make('schedules.schedule_time_slot')
+                // الفترة
+                TextColumn::make('schedule.schedule_time_slot')
                     ->label('الفترة')
-                    ->formatStateUsing(function ($record) {
-                        return $record->schedules->map(fn ($s) => $s->schedule_time_slot === 'morning' ? 'صباحية' : 'مسائية'
-                        )->join(', ');
-                    }),
+                    ->formatStateUsing(fn ($state) => $state === 'morning' ? 'صباحية' : 'مسائية')
+                    ->badge()
+                    ->color(fn ($state) => $state === 'morning' ? 'info' : 'primary'),
 
-                TextColumn::make('schedules.schedule_exam_date')
+                // تاريخ الامتحان
+                TextColumn::make('schedule.schedule_exam_date')
                     ->label('تاريخ الامتحان')
-                    ->formatStateUsing(function ($record) {
-                        return $record->schedules->map(fn ($s) => \Carbon\Carbon::parse($s->schedule_exam_date)->format('Y-m-d')
-                        )->join(', ');
-                    }),
+                    ->date('Y-m-d')
+                    ->sortable(),
 
+                // الموظفون الموزعون
                 TextColumn::make('current_staff')
                     ->label('الموظفون الموزعون')
-                    ->getStateUsing(function (Room $record) {
-                        return "رئيس: {$record->president_count} | أمين سر: {$record->secretary_count} | مراقب: {$record->observer_count}";
+                    ->getStateUsing(function (RoomSchedule $record) {
+                        return sprintf(
+                            'رئيس: %d | أمين سر: %d | مراقب: %d',
+                            $record->president_count,
+                            $record->secretary_count,
+                            $record->observer_count
+                        );
                     }),
 
+                // النقص المطلوب
                 TextColumn::make('required_shortage')
                     ->label('النقص المطلوب')
-                    ->getStateUsing(function (Room $record) {
+                    ->getStateUsing(function (RoomSchedule $record) {
+                        $roomType = $record->room->room_type;
                         $required = [
                             'رئيس' => 1,
-                            'أمين سر' => $record->room_type === 'big' ? 2 : 1,
-                            'مراقب' => $record->room_type === 'big' ? 8 : 4,
+                            'أمين سر' => $roomType === 'big' ? 2 : 1,
+                            'مراقب' => $roomType === 'big' ? 8 : 4,
                         ];
 
                         $shortage = [];
+                        foreach ($required as $role => $req) {
+                            $current = match ($role) {
+                                'رئيس' => $record->president_count,
+                                'أمين سر' => $record->secretary_count,
+                                'مراقب' => $record->observer_count,
+                            };
 
-                        // حساب النقص للرئيس
-                        $presidentShortage = max($required['رئيس'] - $record->president_count, 0);
-                        if ($presidentShortage > 0) {
-                            $shortage[] = "رئيس: {$presidentShortage}";
+                            if ($current < $req) {
+                                $shortage[] = "$role: ".($req - $current);
+                            }
                         }
 
-                        // حساب النقص لأمين السر
-                        $secretaryShortage = max($required['أمين سر'] - $record->secretary_count, 0);
-                        if ($secretaryShortage > 0) {
-                            $shortage[] = "أمين سر: {$secretaryShortage}";
-                        }
-
-                        // حساب النقص للمراقبين
-                        $observerShortage = max($required['مراقب'] - $record->observer_count, 0);
-                        if ($observerShortage > 0) {
-                            $shortage[] = "مراقب: {$observerShortage}";
-                        }
-
-                        return count($shortage) > 0
-                            ? implode(' | ', $shortage)
-                            : 'لا يوجد نقص';
+                        return empty($shortage)
+                            ? 'لا يوجد نقص'
+                            : implode(' | ', $shortage);
                     })
                     ->color('danger'),
 
+                // الحالة
                 TextColumn::make('status')
                     ->label('الحالة')
-                    ->color(fn (Room $record) => $record->president_count >= 1 &&
-                                                $record->secretary_count >= ($record->room_type === 'big' ? 2 : 1) &&
-                                                $record->observer_count >= ($record->room_type === 'big' ? 8 : 4)
-                                                ? 'success' : 'danger')
-                    ->getStateUsing(fn (Room $record) => $record->president_count >= 1 &&
-                                                       $record->secretary_count >= ($record->room_type === 'big' ? 2 : 1) &&
-                                                       $record->observer_count >= ($record->room_type === 'big' ? 8 : 4)
-                                                       ? 'مكتملة' : 'غير مكتملة'),
+                    ->getStateUsing(function (RoomSchedule $record) {
+                        $roomType = $record->room->room_type;
 
+                        return ($record->president_count >= 1 &&
+                                $record->secretary_count >= ($roomType === 'big' ? 2 : 1) &&
+                                $record->observer_count >= ($roomType === 'big' ? 8 : 4))
+                            ? 'مكتملة'
+                            : 'غير مكتملة';
+                    })
+                    ->color(fn ($state) => $state === 'مكتملة' ? 'success' : 'danger'),
+
+                // عرض الموظفين
                 TextColumn::make('view_staff')
                     ->label('الموظفون')
                     ->state('عرض')
                     ->action(
                         Action::make('viewStaff')
-                            ->modalHeading(fn ($record) => "الموظفون في {$record->room_name}")
-                            ->modalContent(function ($record) {
-                                $room = Room::find($record->room_id);
-
-                                return view('filament.tables.actions.staff-list', [
-                                    'groupedStaff' => $room->observers()
-                                        ->with('user.roles')
-                                        ->get()
-                                        ->sortByDesc(fn ($observer) => $this->getRolePriority($observer->user))
-                                        ->groupBy(fn ($observer) => $observer->user->getRoleNames()->first()),
-                                ]);
-                            })
+                            ->modalHeading(fn ($record) => "الموظفون في {$record->room->room_name}")
+                            ->modalContent(fn ($record) => view('filament.tables.actions.staff-list', [
+                                'groupedStaff' => $record->room->observers()
+                                    ->with('user.roles')
+                                    ->get()
+                                    ->sortByDesc(fn ($observer) => $this->getRolePriority($observer->user))
+                                    ->groupBy(fn ($observer) => $observer->user->getRoleNames()->first()),
+                            ]))
                             ->modalWidth('2xl')
                             ->modalSubmitAction(false)
                             ->modalCancelActionLabel('إغلاق')
@@ -160,7 +172,7 @@ class RoomsDistribution extends Page implements HasTable
                         'big' => 'كبيرة',
                         'small' => 'صغيرة',
                     ])
-                    ->column('room_type'),
+                    ->relationship('room', 'room_type'),
             ]);
     }
 
