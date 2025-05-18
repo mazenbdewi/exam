@@ -52,4 +52,20 @@ class Room extends Model
         return $this->belongsToMany(Schedule::class, 'room_schedules', 'room_id', 'schedule_id')
             ->withPivot(['allocated_seats', 'allocated_monitors']);
     }
+
+    // public function isSmall(): bool
+    // {
+    //     return $this->room_type === 'small';
+    // }
+
+    // public function isBig(): bool
+    // {
+    //     return $this->room_type === 'big';
+    // }
+
+    // // في نموذج User
+    // public function scopeRole($query, $role)
+    // {
+    //     return $query->whereHas('roles', fn ($q) => $q->where('name', $role));
+    // }
 }
