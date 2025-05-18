@@ -67,9 +67,7 @@ class RoomsDistribution extends Page implements HasTable
                         'big' => 'success',
                         'small' => 'warning',
                         default => 'gray'
-                    })
-                    ->searchable()
-                    ->sortable(),
+                    }),
 
                 // المادة
                 TextColumn::make('schedule.schedule_subject')
@@ -82,9 +80,8 @@ class RoomsDistribution extends Page implements HasTable
                     ->label('الفترة')
                     ->formatStateUsing(fn ($state) => $state === 'morning' ? 'صباحية' : 'مسائية')
                     ->badge()
-                    ->color(fn ($state) => $state === 'morning' ? 'info' : 'primary')
-                    ->searchable()
-                    ->sortable(),
+                    ->color(fn ($state) => $state === 'morning' ? 'info' : 'primary'),
+
                 // تاريخ الامتحان
                 TextColumn::make('schedule.schedule_exam_date')
                     ->label('تاريخ الامتحان')
@@ -145,9 +142,7 @@ class RoomsDistribution extends Page implements HasTable
                             ? 'مكتملة'
                             : 'غير مكتملة';
                     })
-                    ->color(fn ($state) => $state === 'مكتملة' ? 'success' : 'danger')
-                    ->searchable()
-                    ->sortable(),
+                    ->color(fn ($state) => $state === 'مكتملة' ? 'success' : 'danger'),
 
                 // عرض الموظفين
                 TextColumn::make('view_staff')
