@@ -173,6 +173,49 @@ class RoomsDistribution extends Page implements HasTable
                         'small' => 'صغيرة',
                     ])
                     ->relationship('room', 'room_type'),
+                // داخل مصفوفة الـ filters:
+                SelectFilter::make('status')
+                    ->label('حالة التوزيع')
+                    ->options([
+                        'completed' => 'مكتملة',
+                        'incomplete' => 'غير مكتملة',
+                    ])
+                    ->query(function ($query, $value) {
+                        if ($value === 'completed') {
+                            $query->where(function ($subQuery) {
+                                $subQuery->where('president_count', '>=', 1)
+                                    ->where(function ($q) {
+                                        $q->where(function ($q) {
+                                            $q->whereHas('room', fn ($q) => $q->where('room_type', 'big'))
+                                                ->where('secretary_count', '>=', 2)
+                                                ->where('observer_count', '>=', 8);
+                                        })->orWhere(function ($q) {
+                                            $q->whereHas('room', fn ($q) => $q->where('room_type', 'small'))
+                                                ->where('secretary_count', '>=', 1)
+                                                ->where('observer_count', '>=', 4);
+                                        });
+                                    });
+                            });
+                        } elseif ($value === 'incomplete') {
+                            $query->where(function ($subQuery) {
+                                $subQuery->where('president_count', '<', 1)
+                                    ->orWhere(function ($q) {
+                                        $q->whereHas('room', fn ($q) => $q->where('room_type', 'big'))
+                                            ->where(function ($q) {
+                                                $q->where('secretary_count', '<', 2)
+                                                    ->orWhere('observer_count', '<', 8);
+                                            });
+                                    })
+                                    ->orWhere(function ($q) {
+                                        $q->whereHas('room', fn ($q) => $q->where('room_type', 'small'))
+                                            ->where(function ($q) {
+                                                $q->where('secretary_count', '<', 1)
+                                                    ->orWhere('observer_count', '<', 4);
+                                            });
+                                    });
+                            });
+                        }
+                    }),
             ]);
     }
 
