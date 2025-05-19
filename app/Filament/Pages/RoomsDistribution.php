@@ -181,7 +181,6 @@ class RoomsDistribution extends Page implements HasTable
                         }
                     }),
 
-                // داخل مصفوفة الـ filters:
                 SelectFilter::make('status')
                     ->label('حالة التوزيع')
                     ->options([
@@ -189,80 +188,12 @@ class RoomsDistribution extends Page implements HasTable
                         'incomplete' => 'غير مكتملة',
                     ])
                     ->query(function (Builder $query, array $data) {
-                        if (! empty($data['value'])) {
-                            $isCompleted = ($data['value'] === 'completed');
-
-                            $query->where(function (Builder $subQuery) use ($isCompleted) {
-                                $subQuery->whereHas('room', function (Builder $roomQuery) use ($isCompleted) {
-                                    // للقاعات المكتملة (AND بين الشروط)
-                                    if ($isCompleted) {
-                                        $roomQuery->where(function ($q) {
-                                            $q->whereHas('observers', function ($q) {
-                                                $q->whereHas('user.roles', fn ($q) => $q->where('name', 'رئيس_قاعة'));
-                                            }, '>', 1)
-                                                ->orWhere(function ($q) {
-                                                    $q->where('room_type', 'big')
-                                                        ->whereHas('observers', function ($q) {
-                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
-                                                        }, '>=', 2);
-                                                })
-                                                ->orWhere(function ($q) {
-                                                    $q->where('room_type', 'small')
-                                                        ->whereHas('observers', function ($q) {
-                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
-                                                        }, '>=', 1);
-                                                })
-                                                ->orWhere(function ($q) {
-                                                    $q->where('room_type', 'big')
-                                                        ->whereHas('observers', function ($q) {
-                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
-                                                        }, '>=', 8);
-                                                })
-                                                ->orWhere(function ($q) {
-                                                    $q->where('room_type', 'small')
-                                                        ->whereHas('observers', function ($q) {
-                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
-                                                        }, '>=', 4);
-                                                });
-                                        });
-                                    }
-                                    // للقاعات غير المكتملة (OR بين الشروط)
-                                    else {
-                                        $roomQuery->where(function ($q) {
-                                            $q->whereHas('observers', function ($q) {
-                                                $q->whereHas('user.roles', fn ($q) => $q->where('name', 'رئيس_قاعة'));
-                                            }, '<', 1)
-                                                ->orWhere(function ($q) {
-                                                    $q->where('room_type', 'big')
-                                                        ->whereHas('observers', function ($q) {
-                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
-                                                        }, '<', 2);
-                                                })
-                                                ->orWhere(function ($q) {
-                                                    $q->where('room_type', 'small')
-                                                        ->whereHas('observers', function ($q) {
-                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
-                                                        }, '<', 1);
-                                                })
-                                                ->orWhere(function ($q) {
-                                                    $q->where('room_type', 'big')
-                                                        ->whereHas('observers', function ($q) {
-                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
-                                                        }, '<', 8);
-                                                })
-                                                ->orWhere(function ($q) {
-                                                    $q->where('room_type', 'small')
-                                                        ->whereHas('observers', function ($q) {
-                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
-                                                        }, '<', 4);
-                                                });
-                                        });
-                                    }
-                                });
-                            });
-                        }
+                        return match ($data['value'] ?? null) {
+                            'completed' => $query->completed(),
+                            'incomplete' => $query->incomplete(),
+                            default => $query,
+                        };
                     }),
-
             ]);
     }
 

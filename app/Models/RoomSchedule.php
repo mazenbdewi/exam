@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -56,5 +57,16 @@ class RoomSchedule extends Model
             'room_id',  // Local key على جدول room_schedules
             'room_id'   // Local key على جدول rooms
         );
+    }
+
+    //  Scopes للفلترة
+    public function scopeCompleted(Builder $query)
+    {
+        return $query->whereHas('room', fn ($q) => $q->completed());
+    }
+
+    public function scopeIncomplete(Builder $query)
+    {
+        return $query->whereHas('room', fn ($q) => $q->incomplete());
     }
 }
