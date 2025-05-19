@@ -11,6 +11,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class RoomsDistribution extends Page implements HasTable
 {
@@ -172,7 +173,14 @@ class RoomsDistribution extends Page implements HasTable
                         'big' => 'كبيرة',
                         'small' => 'صغيرة',
                     ])
-                    ->relationship('room', 'room_type'),
+                    ->query(function (Builder $query, array $data) {
+                        if (! empty($data['value'])) {
+                            $query->whereHas('room', function (Builder $subQuery) use ($data) {
+                                $subQuery->where('room_type', $data['value']);
+                            });
+                        }
+                    }),
+
                 // داخل مصفوفة الـ filters:
                 SelectFilter::make('status')
                     ->label('حالة التوزيع')
@@ -180,42 +188,84 @@ class RoomsDistribution extends Page implements HasTable
                         'completed' => 'مكتملة',
                         'incomplete' => 'غير مكتملة',
                     ])
-                    ->query(function ($query, $value) {
-                        if ($value === 'completed') {
-                            $query->where(function ($subQuery) {
-                                $subQuery->where('president_count', '>=', 1)
-                                    ->where(function ($q) {
-                                        $q->where(function ($q) {
-                                            $q->whereHas('room', fn ($q) => $q->where('room_type', 'big'))
-                                                ->where('secretary_count', '>=', 2)
-                                                ->where('observer_count', '>=', 8);
-                                        })->orWhere(function ($q) {
-                                            $q->whereHas('room', fn ($q) => $q->where('room_type', 'small'))
-                                                ->where('secretary_count', '>=', 1)
-                                                ->where('observer_count', '>=', 4);
+                    ->query(function (Builder $query, array $data) {
+                        if (! empty($data['value'])) {
+                            $isCompleted = ($data['value'] === 'completed');
+
+                            $query->where(function (Builder $subQuery) use ($isCompleted) {
+                                $subQuery->whereHas('room', function (Builder $roomQuery) use ($isCompleted) {
+                                    // للقاعات المكتملة (AND بين الشروط)
+                                    if ($isCompleted) {
+                                        $roomQuery->where(function ($q) {
+                                            // رئيس القاعة
+                                            $q->whereHas('observers', function ($q) {
+                                                $q->whereHas('user.roles', fn ($q) => $q->where('name', 'رئيس_قاعة'));
+                                            }, '>=', 1)
+
+                                            // أمين السر حسب النوع
+                                                ->where(function ($q) {
+                                                    $q->where('room_type', 'big')
+                                                        ->whereHas('observers', function ($q) {
+                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
+                                                        }, '>=', 2);
+                                                })->orWhere(function ($q) {
+                                                    $q->where('room_type', 'small')
+                                                        ->whereHas('observers', function ($q) {
+                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
+                                                        }, '>=', 1);
+                                                })
+
+                                            // المراقبين حسب النوع
+                                                ->where(function ($q) {
+                                                    $q->where('room_type', 'big')
+                                                        ->whereHas('observers', function ($q) {
+                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
+                                                        }, '>=', 8);
+                                                })->orWhere(function ($q) {
+                                                    $q->where('room_type', 'small')
+                                                        ->whereHas('observers', function ($q) {
+                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
+                                                        }, '>=', 4);
+                                                });
                                         });
-                                    });
-                            });
-                        } elseif ($value === 'incomplete') {
-                            $query->where(function ($subQuery) {
-                                $subQuery->where('president_count', '<', 1)
-                                    ->orWhere(function ($q) {
-                                        $q->whereHas('room', fn ($q) => $q->where('room_type', 'big'))
-                                            ->where(function ($q) {
-                                                $q->where('secretary_count', '<', 2)
-                                                    ->orWhere('observer_count', '<', 8);
-                                            });
-                                    })
-                                    ->orWhere(function ($q) {
-                                        $q->whereHas('room', fn ($q) => $q->where('room_type', 'small'))
-                                            ->where(function ($q) {
-                                                $q->where('secretary_count', '<', 1)
-                                                    ->orWhere('observer_count', '<', 4);
-                                            });
-                                    });
+                                    }
+                                    // للقاعات غير المكتملة (OR بين الشروط)
+                                    else {
+                                        $roomQuery->where(function ($q) {
+                                            $q->whereHas('observers', function ($q) {
+                                                $q->whereHas('user.roles', fn ($q) => $q->where('name', 'رئيس_قاعة'));
+                                            }, '<', 1)
+                                                ->orWhere(function ($q) {
+                                                    $q->where('room_type', 'big')
+                                                        ->whereHas('observers', function ($q) {
+                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
+                                                        }, '<', 2);
+                                                })
+                                                ->orWhere(function ($q) {
+                                                    $q->where('room_type', 'small')
+                                                        ->whereHas('observers', function ($q) {
+                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
+                                                        }, '<', 1);
+                                                })
+                                                ->orWhere(function ($q) {
+                                                    $q->where('room_type', 'big')
+                                                        ->whereHas('observers', function ($q) {
+                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
+                                                        }, '<', 8);
+                                                })
+                                                ->orWhere(function ($q) {
+                                                    $q->where('room_type', 'small')
+                                                        ->whereHas('observers', function ($q) {
+                                                            $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
+                                                        }, '<', 4);
+                                                });
+                                        });
+                                    }
+                                });
                             });
                         }
                     }),
+
             ]);
     }
 
