@@ -203,7 +203,7 @@ class RoomsDistribution extends Page implements HasTable
                                             }, '>=', 1)
 
                                             // أمين السر حسب النوع
-                                                ->where(function ($q) {
+                                                ->orwhere(function ($q) {
                                                     $q->where('room_type', 'big')
                                                         ->whereHas('observers', function ($q) {
                                                             $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
@@ -216,7 +216,7 @@ class RoomsDistribution extends Page implements HasTable
                                                 })
 
                                             // المراقبين حسب النوع
-                                                ->where(function ($q) {
+                                                ->orwhere(function ($q) {
                                                     $q->where('room_type', 'big')
                                                         ->whereHas('observers', function ($q) {
                                                             $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
