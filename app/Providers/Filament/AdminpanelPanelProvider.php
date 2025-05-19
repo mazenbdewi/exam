@@ -46,7 +46,6 @@ class AdminpanelPanelProvider extends PanelProvider
             // ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
-                // \App\Filament\Widgets\DistributionOverview::class,
                 \App\Filament\Widgets\TotalRoomsWidget::class,
                 \App\Filament\Widgets\StaffStatsWidget::class,
                 \App\Filament\Widgets\TotalBigSmallRoomsWidget::class,
