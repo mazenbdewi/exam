@@ -197,31 +197,28 @@ class RoomsDistribution extends Page implements HasTable
                                     // للقاعات المكتملة (AND بين الشروط)
                                     if ($isCompleted) {
                                         $roomQuery->where(function ($q) {
-                                            // رئيس القاعة
                                             $q->whereHas('observers', function ($q) {
                                                 $q->whereHas('user.roles', fn ($q) => $q->where('name', 'رئيس_قاعة'));
-                                            }, '>=', 1)
-
-                                            // أمين السر حسب النوع
-                                                ->where(function ($q) {
-                                                    $q->orWhere('room_type', 'big')
+                                            }, '>', 1)
+                                                ->orWhere(function ($q) {
+                                                    $q->where('room_type', 'big')
                                                         ->whereHas('observers', function ($q) {
                                                             $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
                                                         }, '>=', 2);
-                                                })->orWhere(function ($q) {
+                                                })
+                                                ->orWhere(function ($q) {
                                                     $q->where('room_type', 'small')
                                                         ->whereHas('observers', function ($q) {
                                                             $q->whereHas('user.roles', fn ($q) => $q->where('name', 'امين_سر'));
                                                         }, '>=', 1);
                                                 })
-
-                                            // المراقبين حسب النوع
-                                                ->where(function ($q) {
-                                                    $q->orWhere('room_type', 'big')
+                                                ->orWhere(function ($q) {
+                                                    $q->where('room_type', 'big')
                                                         ->whereHas('observers', function ($q) {
                                                             $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
                                                         }, '>=', 8);
-                                                })->orWhere(function ($q) {
+                                                })
+                                                ->orWhere(function ($q) {
                                                     $q->where('room_type', 'small')
                                                         ->whereHas('observers', function ($q) {
                                                             $q->whereHas('user.roles', fn ($q) => $q->where('name', 'مراقب'));
