@@ -164,7 +164,7 @@ class RoomsDistribution extends Page implements HasTable
                             ->modalCancelActionLabel('إغلاق')
                     )
                     ->badge()
-                    ->color('success'),
+                    ->color('primary'),
             ])
             ->filters([
                 SelectFilter::make('room_type')
