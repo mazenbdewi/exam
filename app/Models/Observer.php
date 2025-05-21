@@ -44,6 +44,9 @@ class Observer extends Model
         parent::boot();
 
         static::creating(function ($observer) {
+
+            $isManual = ! app()->has('auto_context');
+
             // التحقق من سعة القاعة
             $room = $observer->room;
             if ($room) {
@@ -51,11 +54,13 @@ class Observer extends Model
                 $maxObservers = $room->room_type === 'big' ? 11 : 6;
 
                 if ($currentObservers >= $maxObservers) {
-                    Notification::make()
-                        ->title('خطأ')
-                        ->body('هذه القاعة ممتلئة بالكامل')
-                        ->danger()
-                        ->send();
+                    if ($isManual) {
+                        Notification::make()
+                            ->title('خطأ')
+                            ->body('هذه القاعة ممتلئة بالكامل')
+                            ->danger()
+                            ->send();
+                    }
 
                     return false;
                 }
@@ -66,29 +71,16 @@ class Observer extends Model
                 ->where('schedule_id', $observer->schedule_id)
                 ->exists();
             if ($existingObserver) {
-                Notification::make()
-                    ->title('خطأ')
-                    ->body('هذا المراقب معين مسبقًا لهذه المادة')
-                    ->danger()
-                    ->send();
+                if ($isManual) {
+                    Notification::make()
+                        ->title('خطأ')
+                        ->body('هذا المراقب معين مسبقًا لهذه المادة')
+                        ->danger()
+                        ->send();
+                }
 
                 return false;
             }
-
-            // التحقق من الحد الأقصى للمراقبات
-            // $user = User::find($observer->user_id);
-            // if ($user) {
-            //     $currentObservers = Observer::where('user_id', $observer->user_id)->count();
-            //     if ($currentObservers >= $user->getMaxObserversByAge()) {
-            //         Notification::make()
-            //             ->title('خطأ')
-            //             ->body('تجاوز الحد الأقصى للمراقبات')
-            //             ->danger()
-            //             ->send();
-
-            //         return false;
-            //     }
-            // }
 
             $user = User::withCount('observers')->find($observer->user_id);
 
@@ -96,11 +88,13 @@ class Observer extends Model
                 $maxAllowed = $user->max_observers; // الحد الأقصى من عمود max_observers
 
                 if ($user->observers_count >= $maxAllowed) {
-                    Notification::make()
-                        ->title('تجاوز الحد المسموح')
-                        ->body("لقد تجاوزت الحد الأقصى للمراقبات ({$maxAllowed}) للموظف {$user->name}")
-                        ->danger()
-                        ->send();
+                    if ($isManual) {
+                        Notification::make()
+                            ->title('تجاوز الحد المسموح')
+                            ->body("لقد تجاوزت الحد الأقصى للمراقبات ({$maxAllowed}) للموظف {$user->name}")
+                            ->danger()
+                            ->send();
+                    }
 
                     return false;
                 }
@@ -118,15 +112,18 @@ class Observer extends Model
                     })->exists();
 
                 if ($conflict) {
-                    Notification::make()
-                        ->title('خطأ')
-                        ->body('تعارض في الجدول الزمني')
-                        ->danger()
-                        ->send();
+                    if ($isManual) {
+                        Notification::make()
+                            ->title('خطأ')
+                            ->body('تعارض في الجدول الزمني')
+                            ->danger()
+                            ->send();
+                    }
 
                     return false;
                 }
             }
+
         });
     }
 }

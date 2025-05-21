@@ -12,22 +12,28 @@ use Illuminate\Support\Facades\Log;
 
 class ObserverDistributionService
 {
-    protected static array $usedUserIds = [];
-
     public static function distributeObservers(): void
     {
+        self::startAutoContext();
+
         Observer::truncate();
-        self::resetStaticState();
+
         $schedules = self::getOrderedSchedulesWithRooms();
 
         foreach ($schedules as $schedule) {
             self::processSchedule($schedule);
         }
+        self::endAutoContext();
     }
 
-    private static function resetStaticState(): void
+    private static function startAutoContext(): void
     {
-        self::$usedUserIds = [];
+        app()->instance('auto_context', true); // استخدام instance بدل bind
+    }
+
+    private static function endAutoContext(): void
+    {
+        app()->forgetInstance('auto_context');
     }
 
     private static function getOrderedSchedulesWithRooms(): Collection
@@ -85,10 +91,33 @@ class ObserverDistributionService
     private static function assignObservers(Room $room, Schedule $schedule): void
     {
         $requiredRoles = self::getRequiredRoles($room);
-        $eligibleUsers = self::getEligibleUsers($schedule);
+        $allEligibleUsers = self::getEligibleUsers($schedule);
 
         foreach ($requiredRoles as $role => $required) {
-            self::fillRole($role, $required, $eligibleUsers, $room, $schedule);
+            $assigned = 0;
+
+            $candidates = $allEligibleUsers->filter(fn ($u) => $u->hasRole($role) && self::isAvailable($u, $schedule));
+
+            if ($role === 'مراقب' && $candidates->count() < $required) {
+                // استخدم الأمناء كمراقبين احتياط
+                $candidates = $allEligibleUsers->filter(fn ($u) => ($u->hasRole('امين_سر') || $u->hasRole('مراقب')) && self::isAvailable($u, $schedule)
+                );
+            }
+
+            foreach ($candidates as $user) {
+                if ($assigned >= $required) {
+                    break;
+                }
+
+                if ($user->canTakeMoreObservers()) {
+                    self::createAssignment($user, $room, $schedule);
+                    $assigned++;
+                }
+            }
+
+            if ($assigned < $required) {
+                Log::warning("نقص في {$role} للقاعة {$room->room_id} المطلوب: {$required} المتاح: {$assigned}");
+            }
         }
     }
 
@@ -104,51 +133,24 @@ class ObserverDistributionService
     private static function getEligibleUsers(Schedule $schedule): Collection
     {
         return User::whereHas('roles', fn ($q) => $q->whereIn('name', ['رئيس_قاعة', 'امين_سر', 'مراقب']))
-            ->withCount(['observers' => fn ($q) => $q->where('schedule_id', $schedule->schedule_id)])
-            ->whereNotIn('id', self::$usedUserIds)
-            ->orderByDesc('max_observers')
-            ->orderBy('observers_count')
+            ->withCount(['observers as total_assigned' => fn ($q) => $q])
             ->get()
-            ->filter(fn ($user) => $user->canTakeMoreObservers());
+            ->filter(fn ($user) => $user->canTakeMoreObservers() &&
+                ! Observer::where('user_id', $user->id)
+                    ->whereHas('schedule', fn ($q) => $q->where('schedule_exam_date', $schedule->schedule_exam_date)
+                        ->where('schedule_time_slot', $schedule->schedule_time_slot)
+                    )->exists()
+            )
+            ->sortBy(fn ($u) => $u->total_assigned);
     }
 
-    private static function fillRole(
-        string $role,
-        int $required,
-        Collection $users,
-        Room $room,
-        Schedule $schedule
-    ): void {
-        $candidates = $users->filter(fn ($u) => $u->hasRole($role));
-
-        if ($role === 'مراقب' && $candidates->count() < $required) {
-            $candidates = $users->filter(fn ($u) => $u->hasRole('امين_سر'));
-        }
-
-        $assigned = 0;
-        foreach ($candidates as $user) {
-            if ($assigned >= $required) {
-                break;
-            }
-            if (self::isAvailable($user, $schedule, $room)) {
-                self::createAssignment($user, $room, $schedule);
-                $assigned++;
-            }
-        }
-
-        if ($assigned < $required) {
-            Log::warning("نقص في {$role} للقاعة {$room->room_id} المطلوب: {$required} المتاح: {$assigned}");
-        }
-    }
-
-    private static function isAvailable(User $user, Schedule $schedule, Room $room): bool
+    private static function isAvailable(User $user, Schedule $schedule): bool
     {
         return ! Observer::where('user_id', $user->id)
-            ->whereHas('schedule', fn ($q) => $q->where([
-                ['schedule_exam_date', $schedule->schedule_exam_date],
-                ['schedule_time_slot', $schedule->schedule_time_slot],
-            ]))
-            ->exists();
+            ->whereHas('schedule', fn ($q) => $q
+                ->where('schedule_exam_date', $schedule->schedule_exam_date)
+                ->where('schedule_time_slot', $schedule->schedule_time_slot)
+            )->exists();
     }
 
     private static function createAssignment(User $user, Room $room, Schedule $schedule): void
@@ -159,12 +161,7 @@ class ObserverDistributionService
             'schedule_id' => $schedule->schedule_id,
         ]);
 
-        self::$usedUserIds[] = $user->id;
-        self::$usedUserIds = array_unique(self::$usedUserIds);
-
-        if (! $user->canTakeMoreObservers()) {
-            Log::info("المراقب {$user->name} وصل للحد الأقصى ({$user->max_observers})");
-        }
+        Log::info("تم تعيين {$user->name} كمراقب في القاعة {$room->room_id}");
     }
 
     private static function validateRoomAssignment(Room $room, Schedule $schedule): bool
