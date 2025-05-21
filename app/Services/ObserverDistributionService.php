@@ -445,20 +445,19 @@ class ObserverDistributionService
 
     private static function getEligibleUsersForSchedule(Schedule $schedule): Collection
     {
-        return User::query()
-            ->whereHas('roles', function ($q) {
-                $q->whereIn('name', ['رئيس_قاعة', 'امين_سر', 'مراقب']);
+        return $users = User::select([
+            'users.id',
+            'users.max_observers',
+            DB::raw('(SELECT COUNT(*) FROM observers WHERE users.id = observers.user_id) as observers_count'),
+        ])
+            ->whereHas('roles', function ($query) {
+                $query->whereIn('name', ['رئيس_قاعة', 'امين_سر', 'مراقب']);
             })
-            ->withCount('observers')
-            ->groupBy('users.id') // إضافة groupBy
+            ->groupBy('users.id', 'users.max_observers') // إضافة جميع الأعمدة غير المجمعة
             ->havingRaw('users.max_observers > observers_count OR users.max_observers = 0')
             ->orderByRaw('(users.max_observers - observers_count) DESC')
             ->orderByDesc('created_at')
-            ->get()
-            ->sortByDesc(function (User $user) {
-                return ($user->observers->count() === 0 ? 1000 : 0)
-                    + self::getRolePriority($user);
-            });
+            ->get();
     }
 
     private static function markUsedObserversForSchedule(Schedule $schedule): void
