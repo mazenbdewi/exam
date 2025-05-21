@@ -18,7 +18,7 @@ class CreateObserver extends CreateRecord
         $room = Room::find($this->data['room_id']);
         if ($room) {
             $currentObservers = Observer::where('room_id', $room->room_id)->count();
-            $maxObservers = $room->room_type === 'big' ? 11 : 6; // 11 للكبيرة، 6 للصغيرة
+            $maxObservers = $room->room_type === 'big' ? 11 : 6;
 
             if ($currentObservers >= $maxObservers) {
                 Notification::make()
@@ -32,6 +32,7 @@ class CreateObserver extends CreateRecord
 
         $data = $this->data;
 
+        // التحقق من التكرار
         if (Observer::where('user_id', $data['user_id'])
             ->where('schedule_id', $data['schedule_id'])
             ->exists()) {
@@ -44,46 +45,49 @@ class CreateObserver extends CreateRecord
         }
 
         $user = User::find($data['user_id']);
-        if ($user && Observer::where('user_id', $data['user_id'])->count() >= $user->getMaxObserversByAge()) {
-            Notification::make()
-                ->title('🚫 تجاوز الحد الأقصى')
-                ->body('تجاوز الحد الأقصى للمراقبات المسموحة')
-                ->danger()
-                ->send();
-            $this->halt();
-        }
-        $user = User::find($data['user_id']);
-        $room = Room::find($data['room_id']);
-
-        if ($user && $room) {
-            $userRole = $user->getRoleNames()->first();
-
-            $maxAllowed = match ($userRole) {
-                'مراقب' => ($room->room_type === 'big') ? 8 : 4,
-                'امين_سر' => ($room->room_type === 'big') ? 2 : 1,
-                'رئيس_قاعة' => 1,
-                default => 0,
-            };
-
-            $currentCount = Observer::where('room_id', $room->room_id)
-                ->whereHas('user.roles', function ($query) use ($userRole) {
-                    $query->where('name', $userRole);
-                })->count();
-
-            if ($currentCount >= $maxAllowed) {
-                $roleName = match ($userRole) {
-                    'مراقب' => 'المراقبين',
-                    'امين_سر' => 'أمناء السر',
-                    'رئيس_قاعة' => 'رؤساء القاعات',
-                    default => 'هذا الدور'
-                };
-
+        if ($user) {
+            // التحقق من الحد الأقصى الشخصي للموظف
+            if ($user->max_observers > 0 && $user->observers()->count() >= $user->max_observers) {
                 Notification::make()
-                    ->title('🔴 خطأ في التعيين')
-                    ->body("لا يمكن تعيين أكثر من $maxAllowed $roleName في هذه القاعة")
+                    ->title('🚫 تجاوز الحد الأقصى')
+                    ->body("الحد الأقصى المسموح: {$user->max_observers} مراقبة")
                     ->danger()
                     ->send();
                 $this->halt();
+            }
+
+            // التحقق من الحدود بناءً على الدور ونوع القاعة
+            $userRole = $user->getRoleNames()->first();
+            $room = Room::find($data['room_id']);
+
+            if ($room) {
+                $roleMax = match ($userRole) {
+                    'مراقب' => $room->room_type === 'big' ? 8 : 4,
+                    'امين_سر' => $room->room_type === 'big' ? 2 : 1,
+                    'رئيس_قاعة' => 1,
+                    default => 0,
+                };
+
+                // التحقق من الحد الخاص بالدور
+                $currentRoleCount = Observer::where('room_id', $room->room_id)
+                    ->whereHas('user.roles', fn ($q) => $q->where('name', $userRole))
+                    ->count();
+
+                if ($currentRoleCount >= $roleMax) {
+                    $roleName = match ($userRole) {
+                        'مراقب' => 'المراقبين',
+                        'امين_سر' => 'أمناء السر',
+                        'رئيس_قاعة' => 'رؤساء القاعات',
+                        default => 'هذا الدور'
+                    };
+
+                    Notification::make()
+                        ->title('🔴 خطأ في التعيين')
+                        ->body("لا يمكن تعيين أكثر من $roleMax $roleName في هذه القاعة")
+                        ->danger()
+                        ->send();
+                    $this->halt();
+                }
             }
         }
     }
