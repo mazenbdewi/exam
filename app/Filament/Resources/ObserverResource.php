@@ -109,7 +109,15 @@ class ObserverResource extends Resource
                     ->searchable()
                     ->options(User::whereHas('roles', fn ($q) => $q->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']))->pluck('name', 'id')),
             ])
-            ->actions([Tables\Actions\DeleteAction::make()])
+            ->actions([
+                Tables\Actions\ViewAction::make(),
+                Tables\Actions\EditAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
+            ])
             ->headerActions([
                 Tables\Actions\Action::make('distribute')
                     ->label('توزيع تلقائي')
@@ -136,6 +144,8 @@ class ObserverResource extends Resource
         return [
             'index' => Pages\ListObservers::route('/'),
             'create' => Pages\CreateObserver::route('/create'),
+            'edit' => Pages\EditObserver::route('/{record}/edit'),
+
         ];
     }
 
