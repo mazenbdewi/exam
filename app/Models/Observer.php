@@ -76,19 +76,37 @@ class Observer extends Model
             }
 
             // التحقق من الحد الأقصى للمراقبات
-            $user = User::find($observer->user_id);
+            // $user = User::find($observer->user_id);
+            // if ($user) {
+            //     $currentObservers = Observer::where('user_id', $observer->user_id)->count();
+            //     if ($currentObservers >= $user->getMaxObserversByAge()) {
+            //         Notification::make()
+            //             ->title('خطأ')
+            //             ->body('تجاوز الحد الأقصى للمراقبات')
+            //             ->danger()
+            //             ->send();
+
+            //         return false;
+            //     }
+            // }
+
+            $user = User::withCount('observers')->find($observer->user_id);
+
             if ($user) {
-                $currentObservers = Observer::where('user_id', $observer->user_id)->count();
-                if ($currentObservers >= $user->getMaxObserversByAge()) {
+                $maxAllowed = $user->max_observers; // الحد الأقصى من عمود max_observers
+
+                if ($user->observers_count >= $maxAllowed) {
                     Notification::make()
-                        ->title('خطأ')
-                        ->body('تجاوز الحد الأقصى للمراقبات')
+                        ->title('تجاوز الحد المسموح')
+                        ->body("لقد تجاوزت الحد الأقصى للمراقبات ({$maxAllowed}) للموظف {$user->name}")
                         ->danger()
                         ->send();
 
                     return false;
                 }
             }
+
+            return true;
 
             // التحقق من التعارض الزمني
             $schedule = Schedule::find($observer->schedule_id);

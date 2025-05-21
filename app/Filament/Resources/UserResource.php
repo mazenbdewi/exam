@@ -4,7 +4,6 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
 use App\Models\User;
-use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -50,9 +49,23 @@ class UserResource extends Resource
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->placeholder('09********'),
-                        DatePicker::make('birth_date')
-                            ->label('تاريخ الميلاد')
-                            ->required(),
+                        TextInput::make('max_observers')
+                            ->label('عدد المراقبات')
+                            ->numeric()
+                            ->default(18)
+                            ->required()
+                            ->minValue(6)
+                            ->maxValue(24)
+                            ->rules([
+                                'required',
+                                'integer',
+                                'min:6',
+                                'max:24',
+                            ])
+                            ->validationMessages([
+                                'min' => 'يجب أن يكون عدد المراقبات على الأقل 6',
+                                'max' => 'يجب ألا يتجاوز عدد المراقبات 24',
+                            ]),
                         Select::make('roles')
                             ->relationship('roles', 'name')
                             ->label('الصلاحيات')
@@ -98,6 +111,11 @@ class UserResource extends Resource
             ->columns([
                 TextColumn::make('name')->label('الاسم الكامل')->sortable()->searchable(),
                 TextColumn::make('email')->label('الجوال')->sortable()->searchable(),
+                TextColumn::make('max_observers')
+                    ->label('عدد المراقبات')
+                    ->sortable()
+                    ->searchable(),
+
                 TextColumn::make('roles.name')->label('الصلاحية')->sortable()->searchable(),
             ])
             ->filters([

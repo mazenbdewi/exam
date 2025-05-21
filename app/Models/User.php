@@ -24,7 +24,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'birth_date',
+        'max_observers',
     ];
 
     /**
@@ -43,50 +43,53 @@ class User extends Authenticatable
      * @var array<string, string>
      */
     protected $casts = [
-        'birth_date' => 'datetime:Y-m-d',
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
 
-    public function getAgeAttribute()
-    {
-        return Carbon::parse($this->birth_date)->age;
-    }
+    protected $attributes = [
+        'max_observers' => 18, // قيمة افتراضية
+    ];
 
-    public function getMaxObservers(): array
-    {
-        $age = $this->age;
+    // public function getAgeAttribute()
+    // {
+    //     return Carbon::parse($this->birth_date)->age;
+    // }
 
-        return [
-            'daily' => match (true) {
-                $age >= 60 => 1,  // كبار السن: حد يومي أقل
-                $age >= 50 => 2,
-                $age >= 40 => 3,
-                default => 4      // الشباب: حد يومي أعلى
-            },
-            'total' => match (true) {
-                $age >= 60 => 5,  // كبار السن: حد إجمالي أقل
-                $age >= 50 => 8,
-                $age >= 40 => 12,
-                default => 15     // الشباب: حد إجمالي أعلى
-            },
-        ];
-    }
+    // public function getMaxObservers(): array
+    // {
+    //     $age = $this->age;
 
-    public function getMaxObserversByAge(): int
-    {
-        $age = Carbon::parse($this->birth_date)->age; // حساب العمر
+    //     return [
+    //         'daily' => match (true) {
+    //             $age >= 60 => 1,  // كبار السن: حد يومي أقل
+    //             $age >= 50 => 2,
+    //             $age >= 40 => 3,
+    //             default => 4      // الشباب: حد يومي أعلى
+    //         },
+    //         'total' => match (true) {
+    //             $age >= 60 => 5,  // كبار السن: حد إجمالي أقل
+    //             $age >= 50 => 8,
+    //             $age >= 40 => 12,
+    //             default => 15     // الشباب: حد إجمالي أعلى
+    //         },
+    //     ];
+    // }
 
-        if ($age >= 60) {
-            return 6;
-        } elseif ($age > 50) {
-            return 10;
-        } elseif ($age > 40) {
-            return 12;
-        } else {
-            return 18;
-        }
-    }
+    // public function getMaxObserversByAge(): int
+    // {
+    //     $age = Carbon::parse($this->birth_date)->age; // حساب العمر
+
+    //     if ($age >= 60) {
+    //         return 6;
+    //     } elseif ($age > 50) {
+    //         return 10;
+    //     } elseif ($age > 40) {
+    //         return 12;
+    //     } else {
+    //         return 18;
+    //     }
+    // }
 
     public function delete()
     {
@@ -97,7 +100,6 @@ class User extends Authenticatable
         return parent::delete();
     }
 
-    // في النموذج User.php
     public function schedules()
     {
         return $this->belongsToMany(Schedule::class, 'schedule_user', 'user_id', 'schedule_id')->withTimestamps('schedule_user_created_at', 'schedule_user_updated_at');
@@ -110,13 +112,33 @@ class User extends Authenticatable
 
     public function observers()
     {
-        return $this->hasMany(Observer::class, 'user_id');
+        return $this->hasMany(Observer::class);
     }
 
-    public function exceedsMaxObservers(): bool
+    public function canTakeMoreObservers(): bool
     {
-        $max = $this->getMaxObserversByAge();
+        if ($this->max_observers === 0) {
+            return true; // 0 يعني غير محدود
+        }
 
-        return $this->observers()->count() >= $max;
+        return $this->observers()->count() < $this->max_observers;
     }
+    // public function exceedsMaxObservers(): bool
+    // {
+
+    //     $currentObserversCount = $this->observers()->count();
+
+    //     $maxAllowed = $this->max_observers ?? 18;
+
+    //     return $currentObserversCount >= $maxAllowed;
+
+    //     // return $this->observers()->count() >= $this->max_observers;
+
+    // }
+    // public function exceedsMaxObservers(): bool
+    // {
+    //     $max = $this->getMaxObserversByAge();
+
+    //     return $this->observers()->count() >= $max;
+    // }
 }
