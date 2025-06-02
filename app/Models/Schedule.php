@@ -73,4 +73,44 @@ class Schedule extends Model
             ];
         });
     }
+
+    // في موديل Schedule
+    protected $appends = ['formatted_academic_level', 'formatted_time_slot'];
+
+    public function getFormattedAcademicLevelAttribute()
+    {
+        $levels = [
+            'first' => 'سنة أولى',
+            'second' => 'سنة ثانية',
+            'third' => 'سنة ثالثة',
+            'fourth' => 'سنة رابعة',
+            'fifth' => 'سنة خامسة',
+        ];
+
+        // إذا كان الحقل يحتوي على قيمة مفردة
+        if (isset($levels[$this->schedule_academic_levels])) {
+            return $levels[$this->schedule_academic_levels];
+        }
+
+        // إذا كان الحقل يحتوي على عدة قيم (مصفوفة أو JSON)
+        if (is_array($this->schedule_academic_levels)) {
+            return collect($this->schedule_academic_levels)
+                ->map(function ($level) use ($levels) {
+                    return $levels[$level] ?? $level;
+                })
+                ->implode('، ');
+        }
+
+        return $this->schedule_academic_levels; // العودة للقيمة الأصلية إذا لم تكن مطابقة
+    }
+
+    public function getFormattedTimeSlotAttribute()
+    {
+        $slots = [
+            'morning' => 'صباحية',
+            'night' => 'مسائية',
+        ];
+
+        return $slots[$this->schedule_time_slot] ?? $this->schedule_time_slot;
+    }
 }

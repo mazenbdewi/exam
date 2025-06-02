@@ -98,9 +98,11 @@ class ObserverResource extends Resource
                 Tables\Columns\TextColumn::make('user.name')->label('الاسم'),
                 Tables\Columns\TextColumn::make('user.roles.name')->label('الدور'),
                 Tables\Columns\TextColumn::make('schedule.schedule_subject')->label('المادة'),
-                Tables\Columns\TextColumn::make('formatted_academic_level')->label('السنة'),
-                Tables\Columns\TextColumn::make('schedule.schedule_exam_date')->label('تاريخ الامتحان'),
-                Tables\Columns\TextColumn::make('formatted_time_slot')->label('الفترة'),
+                Tables\Columns\TextColumn::make('schedule.formatted_academic_level')->label('السنة'),
+                Tables\Columns\TextColumn::make('schedule.schedule_exam_date')
+                    ->label('تاريخ الامتحان')
+                    ->date('Y-m-d'),
+                Tables\Columns\TextColumn::make('schedule.formatted_time_slot')->label('الفترة'),
                 Tables\Columns\TextColumn::make('room.room_name')->label('القاعة'),
             ])
             ->filters([
