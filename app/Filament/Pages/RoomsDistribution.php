@@ -27,6 +27,11 @@ class RoomsDistribution extends Page implements HasTable
 
     protected static ?string $title = 'توزيع المراقبين على القاعات';
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any', self::class);
+    }
+
     public function table(Table $table): Table
     {
         return $table

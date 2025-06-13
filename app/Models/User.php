@@ -25,6 +25,7 @@ class User extends Authenticatable
         'email',
         'password',
         'max_observers',
+        'month_part',
     ];
 
     /**
@@ -48,7 +49,8 @@ class User extends Authenticatable
     ];
 
     protected $attributes = [
-        'max_observers' => 18, // قيمة افتراضية
+        'month_part' => 'any',
+        'max_observers' => 18,
     ];
 
     // public function getAgeAttribute()
@@ -93,7 +95,7 @@ class User extends Authenticatable
 
     public function delete()
     {
-        if ($this->email == 'mazen@mazen.mazen') {
+        if ($this->email == 'admin@admin.com') {
             throw new \Exception('لا يمكن حذف مستخدم محمي.');
         }
 

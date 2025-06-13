@@ -23,28 +23,33 @@ class UsersImport implements ToModel, WithHeadingRow, WithValidation
             return null;
         }
 
-        // تعيين كلمة مرور مشفرة
+        // تعيين كلمة مرور مشفرة (من رقم الهاتف)
         $user = User::create([
             'name' => $filteredRow['name'],
-            'email' => $filteredRow['email'],
-            'password' => Hash::make($filteredRow['email']), // استخدام التشفير
+            'email' => $filteredRow['email'], // سيحتوي على رقم الهاتف
+            'password' => Hash::make($filteredRow['email']), // استخدام رقم الهاتف ككلمة سر
             'max_observers' => $filteredRow['max_observers'],
+            'month_part' => $filteredRow['month_part'] ?? 'both', // القيمة الافتراضية 'both'
         ]);
 
+        $user->syncRoles([]);
+
+        // ثم أعطه الدور المحدد من الإكسل فقط
         if ($role = Role::where('name', $filteredRow['role'])->first()) {
             $user->assignRole($role);
-        }
 
-        return $user;
+            return $user;
+        }
     }
 
     public function rules(): array
     {
         return [
             'name' => 'required|string',
-            'email' => 'required',
+            'email' => 'required|regex:/^\+?[0-9]{7,15}$/', // تحقق من صيغة رقم الهاتف
             'role' => 'required|string|exists:roles,name',
             'max_observers' => 'required|integer',
+            'month_part' => 'sometimes|in:first_half,second_half,both,any', // تحقق من القيم المسموحة
         ];
     }
 
@@ -52,13 +57,13 @@ class UsersImport implements ToModel, WithHeadingRow, WithValidation
     {
         return [
             'name.required' => 'حقل الاسم مطلوب',
-            'email.required' => 'حقل البريد الإلكتروني مطلوب',
-            'email.email' => 'يجب إدخال بريد إلكتروني صحيح',
-            'email.unique' => 'هذا البريد الإلكتروني مستخدم بالفعل',
+            'email.required' => 'حقل رقم الهاتف مطلوب',
+            'email.regex' => 'يجب إدخال رقم هاتف صحيح (7-15 رقم)',
             'role.required' => 'حقل الدور مطلوب',
             'role.exists' => 'الدور المحدد غير موجود',
             'max_observers.required' => 'حقل عدد المراقبين مطلوب',
             'max_observers.integer' => 'يجب أن يكون عدداً صحيحاً',
+            'month_part.in' => 'قيمة نصف الشهر غير صالحة (يجب أن تكون: first_half, second_half, both, any)',
         ];
     }
 }

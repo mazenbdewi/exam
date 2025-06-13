@@ -14,7 +14,8 @@ class ListObservers extends ListRecords
     {
 
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()
+                ->hidden(fn () => ! auth()->user()->hasRole('super_admin')),
         ];
 
     }

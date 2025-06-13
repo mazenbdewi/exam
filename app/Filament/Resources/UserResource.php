@@ -10,6 +10,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Columns\SelectColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -66,11 +67,24 @@ class UserResource extends Resource
                                 'min' => 'يجب أن يكون عدد المراقبات على الأقل 6',
                                 'max' => 'يجب ألا يتجاوز عدد المراقبات 24',
                             ]),
+                        Select::make('month_part')
+                            ->label('نصف الشهر')
+                            ->options([
+                                'first_half' => 'النصف الأول',
+                                'second_half' => 'النصف الثاني',
+                                'any' => 'أي يوم',
+
+                            ])
+                            ->default('any')
+                            ->required(),
                         Select::make('roles')
                             ->relationship('roles', 'name')
                             ->label('الصلاحيات')
                             ->required()
                             ->preload()
+                            ->default(
+                                \App\Models\Role::where('name', 'مراقب')->first()?->id
+                            )
                             ->searchable(),
                         TextInput::make('password')
                             ->label('كلمة السر')
@@ -114,7 +128,27 @@ class UserResource extends Resource
                 TextColumn::make('max_observers')
                     ->label('عدد المراقبات')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->formatStateUsing(function ($state, $record) {
+                        return $record->hasRole('super_admin') ? 'لا يوجد' : $state;
+                    }),
+                SelectColumn::make('month_part')
+                    ->label('نصف الشهر')
+                    ->options(function ($record) {
+                        if ($record->hasRole('super_admin')) {
+                            return ['null' => 'لا يوجد'];
+                        }
+
+                        return [
+                            'first_half' => 'النصف الأول',
+                            'second_half' => 'النصف الثاني',
+                            'any' => 'أي يوم',
+                        ];
+                    })
+                    ->disabled(fn ($record) => $record->hasRole('super_admin'))
+                    ->placeholder(fn ($record) => $record->hasRole('super_admin') ? 'لا يوجد' : null)
+
+                    ->rules(['required']),
 
                 TextColumn::make('roles.name')->label('الصلاحية')->sortable()->searchable(),
             ])

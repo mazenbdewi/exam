@@ -38,18 +38,11 @@ class AdminpanelPanelProvider extends PanelProvider
             ->pages([
                 Pages\Dashboard::class,
             ])
-            // ->navigationGroups([
-            //     'توزيع الطلاب' => 1,
-            //     'المراقبات' => 2,
-            //     'إدارة الوصول' => 3,
-            //     'الإعدادات' => 4,
-            // ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
                 \App\Filament\Widgets\TotalRoomsWidget::class,
                 \App\Filament\Widgets\StaffStatsWidget::class,
                 \App\Filament\Widgets\TotalBigSmallRoomsWidget::class,
-                \App\Filament\Widgets\RoomAssignmentWidget::class,
 
             ])
             ->middleware([

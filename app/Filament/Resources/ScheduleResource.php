@@ -57,22 +57,23 @@ class ScheduleResource extends Resource
                             ->label('المادة')
                             ->minLength(2)
                             ->translateLabel()
-                            ->translateLabel()
                             ->maxLength(255)
                             ->suffixIcon('heroicon-m-rectangle-group')
                             ->hintColor('primary')
                             ->autofocus()
                             ->placeholder('اكتب اسم القاعة من فضلك')
                             ->markAsRequired()
-                            ->rules([
-                                function ($get) {
-                                    return Rule::unique('schedules', 'schedule_subject')
-                                        ->where('department_id', $get('department_id'));
-                                },
-                            ])
+                            ->rules(function ($get, $record) {
+                                return [
+                                    Rule::unique('schedules', 'schedule_subject')
+                                        ->where('department_id', $get('department_id'))
+                                        ->ignore($record?->schedule_id, 'schedule_id'),
+                                ];
+                            })
                             ->validationMessages([
                                 'unique' => 'هذه المادة موجودة بالفعل في هذا القسم.',
                             ]),
+
                         DatePicker::make('schedule_exam_date')
                             ->label('تاريخ الامتحان')
                             ->required(),

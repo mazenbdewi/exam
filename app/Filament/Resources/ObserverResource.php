@@ -8,6 +8,7 @@ use App\Models\Observer;
 use App\Models\Schedule;
 use App\Models\User;
 use App\Services\ObserverDistributionService;
+use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -95,15 +96,60 @@ class ObserverResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('schedule.schedule_subject')->label('المادة')
+                    ->formatStateUsing(function ($state, $record) {
+                        $examDate = Carbon::parse($record->schedule->schedule_exam_date);
+
+                        if ($record->schedule->formatted_time_slot == 'صباحية') {
+                            $examDate->setTime(10, 0);
+                        } elseif ($record->schedule->formatted_time_slot == 'مسائية') {
+                            $examDate->setTime(14, 0);
+                        }
+
+                        if (now()->isSameDay($examDate)) {
+                            $status = 'الآن';
+                            $color = 'success';
+                            $icon = '✅';
+                        } elseif (now()->greaterThan($examDate)) {
+                            $status = 'تمت';
+                            $color = 'danger';
+                            $icon = '❌';
+                        } else {
+                            $status = 'لاحقًا';
+                            $color = 'warning';
+                            $icon = '⏳';
+                        }
+
+                        return "{$state} - <span class='text-{$color}-600 font-bold'>{$icon} {$status}</span>";
+                    })
+                    ->html(),
                 Tables\Columns\TextColumn::make('user.name')->label('الاسم'),
                 Tables\Columns\TextColumn::make('user.roles.name')->label('الدور'),
-                Tables\Columns\TextColumn::make('schedule.schedule_subject')->label('المادة'),
                 Tables\Columns\TextColumn::make('schedule.formatted_academic_level')->label('السنة'),
-                Tables\Columns\TextColumn::make('schedule.schedule_exam_date')
-                    ->label('تاريخ الامتحان')
-                    ->date('Y-m-d'),
+                Tables\Columns\TextColumn::make('schedule.schedule_exam_date')->label('تاريخ الامتحان')->date('Y-m-d'),
                 Tables\Columns\TextColumn::make('schedule.formatted_time_slot')->label('الفترة'),
-                Tables\Columns\TextColumn::make('room.room_name')->label('القاعة'),
+
+                Tables\Columns\TextColumn::make('room.room_name')
+                    ->label('القاعة')
+                    ->formatStateUsing(function ($state, $record) {
+                        $user = auth()->user();
+                        if ($user->hasRole('super_admin')) {
+                            return $state;
+                        }
+
+                        $examDate = Carbon::parse($record->schedule->schedule_exam_date);
+                        if ($record->schedule->formatted_time_slot == 'صباحية') {
+                            $examDate->setTime(10, 0);
+                        } elseif ($record->schedule->formatted_time_slot == 'مسائية') {
+                            $examDate->setTime(14, 0);
+                        } else {
+                            return null;
+                        }
+
+                        $showTime = $examDate->subHour();
+
+                        return now()->greaterThanOrEqualTo($showTime) ? $state : '---';
+                    }),
             ])
             ->filters([
                 SelectFilter::make('user_id')
@@ -132,13 +178,21 @@ class ObserverResource extends Resource
                     ->label('تصدير Excel')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->color('success')
-                    ->action(fn () => Excel::download(
-                        new ObserversExport(static::getEloquentQuery()->with(['user', 'schedule', 'room'])),
-                        'observers-'.now()->format('Y-m-d').'.xlsx'
-                    )),
+                    ->action(function (array $data, $livewire) {
+                        $query = static::getEloquentQuery()->with(['user', 'schedule', 'room']);
+
+                        if (! auth()->user()->hasRole('super_admin')) {
+                            $query->where('user_id', auth()->id());
+                        }
+
+                        if ($livewire->tableFilters['user_id']['value'] ?? null) {
+                            $query->where('user_id', $livewire->tableFilters['user_id']['value']);
+                        }
+
+                        return Excel::download(new ObserversExport($query), 'observers-'.now()->format('Y-m-d').'.xlsx');
+                    }),
             ])
-            ->modifyQueryUsing(fn (Builder $query) => auth()->user()->hasRole('super_admin') ? $query : $query->where('user_id', auth()->id())
-            );
+            ->modifyQueryUsing(fn (Builder $query) => auth()->user()->hasRole('super_admin') ? $query : $query->where('user_id', auth()->id()));
     }
 
     public static function getPages(): array
@@ -147,30 +201,14 @@ class ObserverResource extends Resource
             'index' => Pages\ListObservers::route('/'),
             'create' => Pages\CreateObserver::route('/create'),
             'edit' => Pages\EditObserver::route('/{record}/edit'),
-
         ];
     }
 
-    // Helper methods for table columns
-    public static function formattedAcademicLevel($record): string
+    public static function getNavigationBadge(): ?string
     {
-        $levelMap = [
-            'first' => 'سنة أولى', 'second' => 'سنة ثانية',
-            'third' => 'سنة ثالثة', 'fourth' => 'سنة رابعة',
-            'fifth' => 'سنة خامسة', '1' => 'أولى', '2' => 'ثانية',
-            '3' => 'ثالثة', '4' => 'رابعة', '5' => 'خامسة',
-        ];
+        $user = auth()->user();
 
-        return $levelMap[strtolower($record->schedule->schedule_academic_levels)] ?? 'غير معروف';
-    }
-
-    public static function formattedTimeSlot($state): string
-    {
-        return match ($state) {
-            'morning' => 'صباحية',
-            'night' => 'مسائية',
-            default => $state
-        };
+        return $user->hasRole('super_admin') ? static::$model::count() : static::$model::where('user_id', $user->id)->count();
     }
 
     public static function getPluralLabel(): ?string
@@ -181,10 +219,5 @@ class ObserverResource extends Resource
     public static function getLabel(): ?string
     {
         return 'مراقبة';
-    }
-
-    public static function getNavigationBadge(): ?string
-    {
-        return static::$model::count();
     }
 }
