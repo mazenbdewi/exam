@@ -93,7 +93,7 @@ class RoomResource extends Resource
                     ->getStateUsing(function ($record) {
                         return match ($record->room_type) {
                             'amphitheater' => 'مدرج',
-                            'large' => 'كبيرة',
+                            'big' => 'كبيرة',
                             'small' => 'صغيرة',
                             default => $record->room_type
                         };
