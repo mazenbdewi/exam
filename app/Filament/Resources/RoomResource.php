@@ -56,8 +56,21 @@ class RoomResource extends Resource
                             ->label('نوع القاعة')
                             ->suffixIcon('heroicon-m-cube-transparent')
                             ->options([
-                                'small' => 'صغيرة',
+                                'amphitheater' => 'مدرج',
                                 'big' => 'كبيرة',
+                                'small' => 'صغيرة',
+                            ])
+                            ->required()
+                            ->preload()
+                            ->searchable(),
+                        Select::make('room_priority')
+                            ->required()
+                            ->label('أهمية القاعة')
+                            ->suffixIcon('heroicon-m-cube-transparent')
+                            ->options([
+                                1 => 'عالية',
+                                2 => 'وسط',
+                                3 => 'منخفضة',
                             ])
                             ->required()
                             ->preload()
@@ -78,7 +91,24 @@ class RoomResource extends Resource
                     ->sortable()
                     ->searchable()
                     ->getStateUsing(function ($record) {
-                        return $record->room_type === 'small' ? 'صغيرة' : 'كبيرة';
+                        return match ($record->room_type) {
+                            'amphitheater' => 'مدرج',
+                            'large' => 'كبيرة',
+                            'small' => 'صغيرة',
+                            default => $record->room_type
+                        };
+                    }),
+                TextColumn::make('room_priority')
+                    ->label('أهمية القاعة')
+                    ->sortable()
+                    ->searchable()
+                    ->getStateUsing(function ($record) {
+                        return match ($record->room_priority) {
+                            1 => 'عالية',
+                            2 => 'وسط',
+                            3 => 'منخفضة',
+                            default => $record->room_priority
+                        };
                     }),
             ])
             ->filters([

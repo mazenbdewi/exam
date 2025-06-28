@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id('room_id');
             $table->string('room_name');
             $table->integer('room_capacity_total');
-            $table->enum('room_type', ['small', 'big'])->default('small');
+            $table->enum('room_type', ['amphitheater', 'small', 'big'])->default('small');
             $table->timestamp('room_created_at')->nullable();
             $table->timestamp('room_updated_at')->nullable();
         });

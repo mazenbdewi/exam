@@ -15,35 +15,20 @@ class StudentsExport implements FromCollection, WithCustomStartCell, WithHeading
 {
     protected $schedule;
 
-    protected $examModel;
-
-    public function __construct(Schedule $schedule, ?string $examModel = null)
+    public function __construct(Schedule $schedule)
     {
         $this->schedule = $schedule;
-        $this->examModel = $examModel;
     }
 
     public function collection()
     {
         $students = ImportedData::with('room')->get();
 
-        $letters = [];
-        if ($this->examModel) {
-            $letters = explode(',', $this->examModel);
-        }
-
-        $students = $students->map(function ($student, $index) use ($letters) {
-            if (empty($letters)) {
-                $student->exam_sheet = '';
-            } else {
-                $student->exam_sheet = $letters[$index % count($letters)];
-            }
-
+        $students = $students->map(function ($student) {
             return [
                 'الرقم' => $student->number,
                 'الاسم الكامل' => $student->full_name,
                 'اسم الأب' => $student->father_name,
-                'ورقة الامتحان' => $student->exam_sheet,
                 'القاعة' => $student->room ? $student->room->room_name : 'غير معين',
             ];
         });
@@ -57,7 +42,6 @@ class StudentsExport implements FromCollection, WithCustomStartCell, WithHeading
             'الرقم',
             'الاسم الكامل',
             'اسم الأب',
-            'ورقة الامتحان',
             'القاعة',
         ];
     }
@@ -106,48 +90,59 @@ class StudentsExport implements FromCollection, WithCustomStartCell, WithHeading
         }
 
         // إضافة ترويسة الجدول
-        $sheet->mergeCells('A1:E1');
+        $sheet->mergeCells('A1:D1');
         $sheet->setCellValue('A1', 'القسم: '.$schedule->department->department_name);
 
-        $sheet->mergeCells('A2:E2');
+        $sheet->mergeCells('A2:D2');
         $sheet->setCellValue('A2', 'اسم المادة: '.$schedule->schedule_subject);
 
-        $sheet->mergeCells('A3:E3');
+        $sheet->mergeCells('A3:D3');
         $sheet->setCellValue('A3', 'السنة: '.$academicLevelText);
 
-        $sheet->mergeCells('A4:E4');
+        $sheet->mergeCells('A4:D4');
         $sheet->setCellValue('A4', 'تاريخ المادة: '.$schedule->schedule_exam_date);
 
-        $sheet->mergeCells('A5:E5');
+        $sheet->mergeCells('A5:D5');
         $sheet->setCellValue('A5', 'فترة المادة: '.$timeSlotText);
 
-        // ضبط ارتفاع الصفوف
-        $sheet->getRowDimension(1)->setRowHeight(25);
-        $sheet->getRowDimension(2)->setRowHeight(25);
-        $sheet->getRowDimension(3)->setRowHeight(25);
-        $sheet->getRowDimension(4)->setRowHeight(25);
-        $sheet->getRowDimension(5)->setRowHeight(25);
+        // ضبط ارتفاع الصفوف (زيادة الارتفاع بمقدار 40%)
+        $sheet->getRowDimension(1)->setRowHeight(35);
+        $sheet->getRowDimension(2)->setRowHeight(35);
+        $sheet->getRowDimension(3)->setRowHeight(35);
+        $sheet->getRowDimension(4)->setRowHeight(35);
+        $sheet->getRowDimension(5)->setRowHeight(35);
+
+        // زيادة ارتفاع صف العناوين
+        $sheet->getRowDimension(6)->setRowHeight(30);
+
+        // زيادة ارتفاع صفوف البيانات
+        $highestRow = $sheet->getHighestRow();
+        for ($row = 7; $row <= $highestRow; $row++) {
+            $sheet->getRowDimension($row)->setRowHeight(25);
+        }
 
         // ضبط عرض الأعمدة لتناسب الصفحة العمودية
-        $sheet->getColumnDimension('A')->setWidth(10); // الرقم
-        $sheet->getColumnDimension('B')->setWidth(30); // الاسم الكامل
-        $sheet->getColumnDimension('C')->setWidth(20); // اسم الأب
-        $sheet->getColumnDimension('D')->setWidth(15); // ورقة الامتحان
-        $sheet->getColumnDimension('E')->setWidth(20); // القاعة
+        $sheet->getColumnDimension('A')->setWidth(15); // الرقم
+        $sheet->getColumnDimension('B')->setWidth(40); // الاسم الكامل
+        $sheet->getColumnDimension('C')->setWidth(25); // اسم الأب
+        $sheet->getColumnDimension('D')->setWidth(25); // القاعة
 
         // تنسيق الترويسة
-        $sheet->getStyle('A1:E5')->applyFromArray([
+        $headerStyle = [
             'font' => [
                 'bold' => true,
-                'size' => 12,
+                'size' => 14,
             ],
             'alignment' => [
                 'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
             ],
-        ]);
+        ];
+
+        $sheet->getStyle('A1:D5')->applyFromArray($headerStyle);
 
         // تنسيق عناوين الأعمدة
-        $sheet->getStyle('A6:E6')->applyFromArray([
+        $columnHeaderStyle = [
             'font' => [
                 'bold' => true,
                 'size' => 12,
@@ -160,28 +155,35 @@ class StudentsExport implements FromCollection, WithCustomStartCell, WithHeading
             ],
             'alignment' => [
                 'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
             ],
             'borders' => [
                 'allBorders' => [
-                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, // إضافة حدود رقيقة
+                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
                 ],
             ],
-        ]);
+        ];
+
+        $sheet->getStyle('A6:D6')->applyFromArray($columnHeaderStyle);
 
         // تنسيق البيانات
-        $sheet->getStyle('A6:E'.$sheet->getHighestRow())->applyFromArray([
+        $dataStyle = [
             'font' => [
-                'size' => 11,
+                'size' => 12,
             ],
             'alignment' => [
                 'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                'wrapText' => true, // تمكين التفاف النص
             ],
             'borders' => [
                 'allBorders' => [
-                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, // إضافة حدود رقيقة
+                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
                 ],
             ],
-        ]);
+        ];
+
+        $sheet->getStyle('A7:D'.$highestRow)->applyFromArray($dataStyle);
 
         // إظهار خطوط الخلايا (Gridlines)
         $sheet->setShowGridlines(true);
@@ -189,19 +191,13 @@ class StudentsExport implements FromCollection, WithCustomStartCell, WithHeading
         // إعداد الصفحة للطباعة بشكل عمودي على A4
         $sheet->getPageSetup()->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_PORTRAIT);
         $sheet->getPageSetup()->setPaperSize(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_A4);
-        $sheet->getPageSetup()->setFitToWidth(1); // ضبط العرض ليتناسب مع صفحة واحدة
-        $sheet->getPageSetup()->setFitToHeight(0); // عدم ضبط الارتفاع
+        $sheet->getPageSetup()->setFitToWidth(1);
+        $sheet->getPageSetup()->setFitToHeight(0);
 
         // إضافة هوامش للصفحة
         $sheet->getPageMargins()->setTop(0.75);
         $sheet->getPageMargins()->setRight(0.75);
         $sheet->getPageMargins()->setLeft(0.75);
         $sheet->getPageMargins()->setBottom(0.75);
-
-        // إعداد رأس الصفحة وتذييلها (اختياري)
-        $sheet->getHeaderFooter()
-            ->setOddHeader('&C&Hالترويسة'); // رأس الصفحة
-        $sheet->getHeaderFooter()
-            ->setOddFooter('&C&Hالتذييل'); // تذييل الصفحة
     }
 }

@@ -35,4 +35,20 @@ class Reservation extends Model
     {
         return $this->belongsTo(Room::class, 'room_id', 'room_id');
     }
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($reservation) {
+            $exists = Reservation::where('room_id', $reservation->room_id)
+                ->where('date', $reservation->date)
+                ->where('time_slot', $reservation->time_slot)
+                ->exists();
+
+            if ($exists) {
+                throw new \Exception('القاعة محجوزة بالفعل في هذا التوقيت');
+            }
+        });
+    }
 }

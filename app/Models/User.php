@@ -4,7 +4,6 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use BezhanSalleh\FilamentShield\Traits\HasPanelShield;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -26,6 +25,8 @@ class User extends Authenticatable
         'password',
         'max_observers',
         'month_part',
+        'observer_type',
+        'monitoring_level',
     ];
 
     /**
@@ -46,52 +47,15 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'monitoring_level' => 'integer',
     ];
 
     protected $attributes = [
         'month_part' => 'any',
         'max_observers' => 18,
+        'observer_type' => 'primary',
+        'monitoring_level' => 1,
     ];
-
-    // public function getAgeAttribute()
-    // {
-    //     return Carbon::parse($this->birth_date)->age;
-    // }
-
-    // public function getMaxObservers(): array
-    // {
-    //     $age = $this->age;
-
-    //     return [
-    //         'daily' => match (true) {
-    //             $age >= 60 => 1,  // كبار السن: حد يومي أقل
-    //             $age >= 50 => 2,
-    //             $age >= 40 => 3,
-    //             default => 4      // الشباب: حد يومي أعلى
-    //         },
-    //         'total' => match (true) {
-    //             $age >= 60 => 5,  // كبار السن: حد إجمالي أقل
-    //             $age >= 50 => 8,
-    //             $age >= 40 => 12,
-    //             default => 15     // الشباب: حد إجمالي أعلى
-    //         },
-    //     ];
-    // }
-
-    // public function getMaxObserversByAge(): int
-    // {
-    //     $age = Carbon::parse($this->birth_date)->age; // حساب العمر
-
-    //     if ($age >= 60) {
-    //         return 6;
-    //     } elseif ($age > 50) {
-    //         return 10;
-    //     } elseif ($age > 40) {
-    //         return 12;
-    //     } else {
-    //         return 18;
-    //     }
-    // }
 
     public function delete()
     {
@@ -117,30 +81,53 @@ class User extends Authenticatable
         return $this->hasMany(Observer::class);
     }
 
+    // public function canTakeMoreObservers(): bool
+    // {
+    //     // حساب العبء بناءً على مستوى المراقبة
+    //     $monitoringLoad = $this->observers->sum(function ($observer) {
+    //         return match ($observer->monitoring_level) {
+    //             1 => 1.0,
+    //             2 => 0.5,
+    //             3 => 0.25,
+    //             default => 0
+    //         };
+    //     });
+
+    //     // الحد الأقصى للعبء (مثال: 2.0 يعني 2 مهمة كاملة)
+    //     $maxLoad = $this->max_observers ?? 2.0;
+
+    //     return $monitoringLoad < $maxLoad;
+    // }
+    // في app/Models/User.php
+    // public function canTakeMoreObservers(): bool
+    // {
+    //     // حساب العبء الحالي
+    //     $currentLoad = $this->observers->sum(function ($observer) {
+    //         return match ($observer->monitoring_level) {
+    //             1 => 1.0,
+    //             2 => 0.5,
+    //             3 => 0.25,
+    //             default => 0
+    //         };
+    //     });
+
+    //     // الحد الأقصى (مثال: 2.0 يعني مهمتين كاملتين)
+    //     $maxLoad = $this->max_observers ?? 2.0;
+
+    //     return $currentLoad < $maxLoad;
+    // }
+
     public function canTakeMoreObservers(): bool
     {
-        if ($this->max_observers === 0) {
-            return true; // 0 يعني غير محدود
-        }
-
         return $this->observers()->count() < $this->max_observers;
     }
-    // public function exceedsMaxObservers(): bool
-    // {
 
-    //     $currentObserversCount = $this->observers()->count();
+    public function getAvailabilityForSchedule(Schedule $schedule): bool
+    {
+        $half = (Carbon::parse($schedule->schedule_exam_date)->day <= 15)
+            ? 'first_half'
+            : 'second_half';
 
-    //     $maxAllowed = $this->max_observers ?? 18;
-
-    //     return $currentObserversCount >= $maxAllowed;
-
-    //     // return $this->observers()->count() >= $this->max_observers;
-
-    // }
-    // public function exceedsMaxObservers(): bool
-    // {
-    //     $max = $this->getMaxObserversByAge();
-
-    //     return $this->observers()->count() >= $max;
-    // }
+        return $this->month_part === 'any' || $this->month_part === $half;
+    }
 }

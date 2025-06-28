@@ -3,11 +3,17 @@
 namespace App\Filament\Widgets;
 
 use App\Models\RoomSchedule;
+use App\Models\User;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Card;
 
 class StaffStatsWidget extends StatsOverviewWidget
 {
+    protected function getColumns(): int
+    {
+        return 3; // 3 كروت في كل صف
+    }
+
     protected function getCards(): array
     {
         $totalRequired = [
@@ -48,33 +54,42 @@ class StaffStatsWidget extends StatsOverviewWidget
             $totalCurrent['مراقب'] += $record->observer_count;
         }
 
-        return [
-            $this->buildCard('رؤساء القاعات', $totalCurrent['رئيس'], $totalRequired['رئيس']),
-            $this->buildCard('أمناء السر', $totalCurrent['أمين سر'], $totalRequired['أمين سر']),
-            $this->buildCard('المراقبين', $totalCurrent['مراقب'], $totalRequired['مراقب']),
+        $totalStaff = [
+            'رئيس_قاعة' => User::role('رئيس_قاعة')->count(),
+            'امين_سر' => User::role('امين_سر')->count(),
+            'مراقب' => User::role('مراقب')->count(),
         ];
-    }
 
-    private function buildCard(string $label, int $current, int $required): Card
-    {
-        $diff = $current - $required;
+        $primaryObservers = User::whereHas('roles', fn ($q) => $q->where('name', 'مراقب'))
+            ->where('observer_type', 'primary')->count();
 
-        if ($diff > 0) {
-            $suffix = ' 🔺 زيادة: '.$diff;
-            $color = 'success';
-            $icon = 'heroicon-o-arrow-trending-up';
-        } elseif ($diff < 0) {
-            $suffix = ' 🔻 نقص: '.abs($diff);
-            $color = 'danger';
-            $icon = 'heroicon-o-arrow-trending-down';
-        } else {
-            $suffix = ' ✅ مكتمل';
-            $color = 'primary';
-            $icon = 'heroicon-o-check-circle';
-        }
+        $secondaryObservers = User::whereHas('roles', fn ($q) => $q->where('name', 'مراقب'))
+            ->where('observer_type', 'secondary')->count();
 
-        return Card::make($label, "{$current} من {$required} {$suffix}")
-            ->color($color)
-            ->icon($icon);
+        $reserveObservers = User::whereHas('roles', fn ($q) => $q->where('name', 'مراقب'))
+            ->where('observer_type', 'reserve')->count();
+
+        $monitoringLevels = [
+            'لا يراقب' => User::where('monitoring_level', 0)->count(),
+            'مراقبة كاملة' => User::where('monitoring_level', 1)->count(),
+            'نصف مراقبة' => User::where('monitoring_level', 2)->count(),
+            'ربع مراقبة' => User::where('monitoring_level', 3)->count(),
+        ];
+
+        return [
+
+            Card::make('عدد رؤساء القاعات الكلي', $totalStaff['رئيس_قاعة'])->color('primary')->icon('heroicon-o-user-group'),
+            Card::make('عدد أمناء السر الكلي', $totalStaff['امين_سر'])->color('primary')->icon('heroicon-o-user-group'),
+            Card::make('عدد المراقبين الكلي', $totalStaff['مراقب'])->color('primary')->icon('heroicon-o-user-group'),
+
+            Card::make('المراقبون الأساسيون', $primaryObservers)->color('success')->icon('heroicon-o-star'),
+            Card::make('المراقبون الثانويون', $secondaryObservers)->color('warning')->icon('heroicon-o-adjustments-horizontal'),
+            Card::make('المراقبون الاحتياط', $reserveObservers)->color('danger')->icon('heroicon-o-clock'),
+
+            Card::make('لا يراقب', $monitoringLevels['لا يراقب'])->color('gray')->icon('heroicon-o-x-circle'),
+            Card::make('مراقبة كاملة', $monitoringLevels['مراقبة كاملة'])->color('success')->icon('heroicon-o-eye'),
+            Card::make('نصف مراقبة', $monitoringLevels['نصف مراقبة'])->color('warning')->icon('heroicon-o-eye'),
+            Card::make('ربع مراقبة', $monitoringLevels['ربع مراقبة'])->color('danger')->icon('heroicon-o-eye'),
+        ];
     }
 }

@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\User;
 use App\Models\Schedule;
+use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class SchedulePolicy
@@ -23,7 +23,8 @@ class SchedulePolicy
      */
     public function view(User $user, Schedule $schedule): bool
     {
-        return $user->can('view_schedule');
+        // return $user->can('view_schedule');
+        return $user->hasRole('super_admin');
     }
 
     /**
@@ -31,7 +32,8 @@ class SchedulePolicy
      */
     public function create(User $user): bool
     {
-        return $user->can('create_schedule');
+        // return $user->can('create_schedule');
+        return $user->hasRole('super_admin');
     }
 
     /**
@@ -39,7 +41,8 @@ class SchedulePolicy
      */
     public function update(User $user, Schedule $schedule): bool
     {
-        return $user->can('update_schedule');
+        // return $user->can('update_schedule');
+        return $user->hasRole('super_admin');
     }
 
     /**
@@ -47,7 +50,8 @@ class SchedulePolicy
      */
     public function delete(User $user, Schedule $schedule): bool
     {
-        return $user->can('delete_schedule');
+        // return $user->can('delete_schedule');
+        return $user->hasRole('super_admin');
     }
 
     /**
@@ -55,7 +59,8 @@ class SchedulePolicy
      */
     public function deleteAny(User $user): bool
     {
-        return $user->can('delete_any_schedule');
+        // return $user->can('delete_any_schedule');
+        return $user->hasRole('super_admin');
     }
 
     /**

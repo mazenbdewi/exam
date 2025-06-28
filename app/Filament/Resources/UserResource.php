@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
 use App\Models\User;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -46,27 +47,9 @@ class UserResource extends Resource
                             ->markAsRequired(),
 
                         TextInput::make('email')
-                            ->label('الجوال')
+                            ->label('الرقم الوطني')
                             ->required()
-                            ->unique(ignoreRecord: true)
-                            ->placeholder('09********'),
-                        TextInput::make('max_observers')
-                            ->label('عدد المراقبات')
-                            ->numeric()
-                            ->default(18)
-                            ->required()
-                            ->minValue(6)
-                            ->maxValue(24)
-                            ->rules([
-                                'required',
-                                'integer',
-                                'min:6',
-                                'max:24',
-                            ])
-                            ->validationMessages([
-                                'min' => 'يجب أن يكون عدد المراقبات على الأقل 6',
-                                'max' => 'يجب ألا يتجاوز عدد المراقبات 24',
-                            ]),
+                            ->unique(ignoreRecord: true),
                         Select::make('month_part')
                             ->label('نصف الشهر')
                             ->options([
@@ -76,6 +59,30 @@ class UserResource extends Resource
 
                             ])
                             ->default('any')
+                            ->required(),
+                        Radio::make('observer_type')
+                            ->label('نوع المراقب')
+                            ->disabled(fn ($record) => $record && $record->hasRole('super_admin'))
+                            ->options([
+                                'primary' => 'أساسي',
+                                'secondary' => 'ثانوي',
+                                'reserve' => 'احتياط',
+                            ])
+                            ->default('primary')
+                            ->inline()
+                            ->required(),
+
+                        Radio::make('monitoring_level')
+                            ->label('مستوى المراقبة')
+                            ->disabled(fn ($record) => $record && $record->hasRole('super_admin'))
+                            ->options([
+                                1 => 'يراقب مراقبة كاملة',
+                                2 => 'يراقب نصف مراقبة',
+                                3 => 'يراقب ربع مراقبة',
+                                0 => 'لا يراقب',
+                            ])
+                            ->default(1)
+                            ->inline()
                             ->required(),
                         Select::make('roles')
                             ->relationship('roles', 'name')
@@ -124,14 +131,52 @@ class UserResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')->label('الاسم الكامل')->sortable()->searchable(),
-                TextColumn::make('email')->label('الجوال')->sortable()->searchable(),
-                TextColumn::make('max_observers')
-                    ->label('عدد المراقبات')
+                TextColumn::make('email')->label('الرقم الوطني')->sortable()->searchable(),
+                SelectColumn::make('observer_type')
+                    ->label('نوع المراقب')
+                    ->options(function ($record) {
+                        if ($record->hasRole('super_admin')) {
+                            return ['null' => 'لا يوجد'];
+                        }
+
+                        return [
+                            'primary' => 'أساسي',
+                            'secondary' => 'ثانوي',
+                            'reserve' => 'احتياط',
+                        ];
+                    })
+                    ->afterStateUpdated(function ($state, $record) {
+                        $record->save();
+                    })
+                    ->disabled(fn ($record) => $record->hasRole('super_admin'))
+                    ->placeholder(fn ($record) => $record->hasRole('super_admin') ? 'لا يوجد' : null)
+
+                    ->rules(['required'])
                     ->sortable()
-                    ->searchable()
-                    ->formatStateUsing(function ($state, $record) {
-                        return $record->hasRole('super_admin') ? 'لا يوجد' : $state;
-                    }),
+                    ->searchable(),
+                SelectColumn::make('monitoring_level')
+                    ->label('مستوى المراقبة')
+                    ->options(function ($record) {
+                        if ($record->hasRole('super_admin')) {
+                            return ['null' => 'لا يوجد'];
+                        }
+
+                        return [
+                            1 => 'مراقبة كاملة',
+                            2 => 'نصف مراقبة',
+                            3 => 'ربع مراقبة',
+                            0 => 'لا يراقب',
+                        ];
+                    })
+                    ->afterStateUpdated(function ($state, $record) {
+                        $record->save();
+                    })
+                    ->disabled(fn ($record) => $record->hasRole('super_admin'))
+                    ->placeholder(fn ($record) => $record->hasRole('super_admin') ? 'لا يوجد' : null)
+
+                    ->rules(['required', 'integer', 'min:0', 'max:3'])
+                    ->sortable()
+                    ->searchable(),
                 SelectColumn::make('month_part')
                     ->label('نصف الشهر')
                     ->options(function ($record) {

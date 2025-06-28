@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\User;
 use App\Models\Observer;
+use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class ObserverPolicy
@@ -23,7 +23,8 @@ class ObserverPolicy
      */
     public function view(User $user, Observer $observer): bool
     {
-        return $user->can('view_observer');
+        // return $user->can('view_observer');
+        return $user->hasRole('super_admin');
     }
 
     /**
@@ -31,7 +32,8 @@ class ObserverPolicy
      */
     public function create(User $user): bool
     {
-        return $user->can('create_observer');
+        // return $user->can('create_observer');
+        return $user->hasRole('super_admin');
     }
 
     /**
@@ -39,7 +41,9 @@ class ObserverPolicy
      */
     public function update(User $user, Observer $observer): bool
     {
-        return $user->can('update_observer');
+        // return $user->can('update_observer');
+        return $user->hasRole('super_admin');
+
     }
 
     /**

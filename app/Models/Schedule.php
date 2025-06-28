@@ -14,7 +14,7 @@ class Schedule extends Model
 
     protected $primaryKey = 'schedule_id';
 
-    protected $fillable = ['schedule_subject', 'department_id', 'schedule_exam_date', 'schedule_academic_levels', 'schedule_time_slot', 'room_id'];
+    protected $fillable = ['schedule_subject', 'department_id', 'schedule_exam_date', 'schedule_academic_levels', 'schedule_time_slot', 'room_id', 'student_count'];
 
     const CREATED_AT = 'schedule_created_at';
 
@@ -75,7 +75,7 @@ class Schedule extends Model
     }
 
     // في موديل Schedule
-    protected $appends = ['formatted_academic_level', 'formatted_time_slot'];
+    protected $appends = ['formatted_academic_level', 'formatted_time_slot', 'unallocated_students'];
 
     public function getFormattedAcademicLevelAttribute()
     {
@@ -112,5 +112,45 @@ class Schedule extends Model
         ];
 
         return $slots[$this->schedule_time_slot] ?? $this->schedule_time_slot;
+    }
+
+    public function getRemainingCapacityAttribute()
+    {
+        return $this->student_count - $this->reservations()->sum('used_capacity');
+    }
+
+    public function allocatedRooms()
+    {
+        return $this->belongsToMany(Room::class, 'reservations', 'schedule_id', 'room_id')
+            ->using(ReservationPivot::class)
+            ->withPivot(['used_capacity', 'capacity_mode', 'date', 'time_slot']);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->with(['allocatedRooms']);
+    }
+
+    // في app/Models/Schedule.php
+    public function getRoomsDistributionAttribute()
+    {
+        return $this->allocatedRooms->map(function ($room) {
+            return $room->room_name.' ('.$room->pivot->used_capacity.')';
+        })->implode(', ');
+    }
+
+    // public function getUnallocatedStudentsAttribute()
+    // {
+    //     $allocated = $this->reservations()->sum('used_capacity');
+
+    //     return max(0, $this->student_count - $allocated);
+    // }
+
+    public function getUnallocatedStudentsAttribute()
+    {
+        $allocated = $this->reservations_sum_used_capacity ?? 0;
+
+        return max(0, $this->student_count - $allocated);
     }
 }

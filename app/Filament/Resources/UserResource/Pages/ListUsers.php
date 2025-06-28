@@ -39,14 +39,41 @@ class ListUsers extends ListRecords
                                     <h4 class="font-bold mb-2">تنسيق الملف المطلوب:</h4>
                                     <ul class="list-disc pl-5 space-y-1">
                                         <li><strong>name</strong>: الاسم الكامل للمستخدم</li>
-                                        <li><strong>email</strong>: رقم الهاتف (7-15 رقم)</li>
-                                        <li><strong>role</strong>: الدور (رئيس_قاعة، أمين_سر، مراقب)</li>
-                                        <li><strong>max_observers</strong>: الحد الأقصى للمراقبين (رقم صحيح)</li>
-                                        <li><strong>month_part</strong>: التوفر (first_half, second_half, both, any)</li>
+                                        <li><strong>email</strong>: الرقم الوطني</li>
+                                        <li><strong>role</strong>: الدور الوظيفي 
+                                            <ul class="list-disc pl-5">
+                                                <li>رئيس_قاعة</li>
+                                                <li>امين_سر</li>
+                                                <li>مراقب</li>
+                                            </ul>
+                                        </li>
+                                        <li><strong>month_part</strong>: جزء الشهر الذي يتوفر فيه الموظف
+                                            <ul class="list-disc pl-5">
+                                                <li>first_half: النصف الأول من الشهر</li>
+                                                <li>second_half: النصف الثاني من الشهر</li>
+                                                <li>any: متاح طوال الشهر</li>
+                                            </ul>
+                                        </li>
+                                        <li><strong>observer_type</strong>: نوع المراقب
+                                            <ul class="list-disc pl-5">
+                                                <li>primary: مراقب أساسي</li>
+                                                <li>secondary: مراقب ثانوي</li>
+                                                <li>reserve: مراقب احتياط</li>
+                                            </ul>
+                                        </li>
+                                        <li><strong>monitoring_level</strong>: مستوى المراقبة
+                                            <ul class="list-disc pl-5">
+                                                <li>0: لا يراقب</li>
+                                                <li>1: مراقبة كاملة</li>
+                                                <li>2: نصف مراقبة</li>
+                                                <li>3: ربع مراقبة</li>
+                                            </ul>
+                                        </li>
                                     </ul>
                                 </div>
                             ')
                         )
+
                         ->hint('يجب أن يكون الملف بصيغة XLSX, XLS أو CSV')
                         ->hintIcon('heroicon-o-information-circle'),
                 ])

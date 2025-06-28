@@ -39,18 +39,78 @@ class Observer extends Model
         return $this->belongsTo(Room::class, 'room_id');
     }
 
+    // protected static function boot()
+    // {
+    //     parent::boot();
+
+    //     static::creating(function ($observer) {
+    //         $isManual = ! app()->has('auto_context');
+
+    //         // التحقق من سعة القاعة
+    //         $room = $observer->room;
+    //         if ($room) {
+    //             $currentObservers = Observer::where('room_id', $room->room_id)->count();
+    //             $maxObservers = $room->room_type === 'big' ? 11 : 6;
+
+    //             if ($currentObservers >= $maxObservers) {
+    //                 if ($isManual) {
+    //                     Notification::make()
+    //                         ->title('خطأ')
+    //                         ->body('هذه القاعة ممتلئة بالكامل')
+    //                         ->danger()
+    //                         ->send();
+    //                 }
+    //                 throw new \Exception('القاعة ممتلئة بالكامل');
+    //             }
+    //         }
+
+    //         // التحقق من التكرار
+    //         $existingObserver = Observer::where('user_id', $observer->user_id)
+    //             ->where('schedule_id', $observer->schedule_id)
+    //             ->exists();
+
+    //         if ($existingObserver) {
+    //             if ($isManual) {
+    //                 Notification::make()
+    //                     ->title('خطأ')
+    //                     ->body('هذا المراقب معين مسبقًا لهذه المادة')
+    //                     ->danger()
+    //                     ->send();
+    //             }
+    //             throw new \Exception('المراقب معين مسبقًا');
+    //         }
+
+    //         $user = User::withCount('observers')->find($observer->user_id);
+    //         if ($user) {
+    //             $maxAllowed = $user->max_observers;
+    //             if ($user->observers_count >= $maxAllowed) {
+    //                 if ($isManual) {
+    //                     Notification::make()
+    //                         ->title('تجاوز الحد المسموح')
+    //                         ->body("لقد تجاوز الحد الأقصى للمراقبات ({$maxAllowed}) للموظف {$user->name}")
+    //                         ->danger()
+    //                         ->send();
+    //                 }
+    //                 throw new \Exception('تجاوز الحد الأقصى للمراقبات');
+    //             }
+    //         }
+    //     });
+    // }
+
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($observer) {
-
             $isManual = ! app()->has('auto_context');
 
             // التحقق من سعة القاعة
-            $room = $observer->room;
+            $room = Room::find($observer->room_id);
             if ($room) {
-                $currentObservers = Observer::where('room_id', $room->room_id)->count();
+                $currentObservers = Observer::where('room_id', $room->room_id)
+                    ->where('schedule_id', $observer->schedule_id)
+                    ->count();
+
                 $maxObservers = $room->room_type === 'big' ? 11 : 6;
 
                 if ($currentObservers >= $maxObservers) {
@@ -61,15 +121,15 @@ class Observer extends Model
                             ->danger()
                             ->send();
                     }
-
-                    return false;
+                    throw new \Exception('القاعة ممتلئة بالكامل');
                 }
             }
 
-            // التحقق من التكرار
+            // التحقق من التكرار للمراقب في نفس المادة
             $existingObserver = Observer::where('user_id', $observer->user_id)
                 ->where('schedule_id', $observer->schedule_id)
                 ->exists();
+
             if ($existingObserver) {
                 if ($isManual) {
                     Notification::make()
@@ -78,15 +138,13 @@ class Observer extends Model
                         ->danger()
                         ->send();
                 }
-
-                return false;
+                throw new \Exception('المراقب معين مسبقًا');
             }
 
+            // التحقق من الحد الأقصى للمراقبات
             $user = User::withCount('observers')->find($observer->user_id);
-
             if ($user) {
-                $maxAllowed = $user->max_observers; // الحد الأقصى من عمود max_observers
-
+                $maxAllowed = $user->max_observers;
                 if ($user->observers_count >= $maxAllowed) {
                     if ($isManual) {
                         Notification::make()
@@ -95,35 +153,37 @@ class Observer extends Model
                             ->danger()
                             ->send();
                     }
-
-                    return false;
+                    throw new \Exception('تجاوز الحد الأقصى للمراقبات');
                 }
             }
 
-            return true;
-
-            // التحقق من التعارض الزمني
+            // التحقق من التعارض في المواعيد
             $schedule = Schedule::find($observer->schedule_id);
             if ($schedule) {
-                $conflict = Observer::where('user_id', $observer->user_id)
+                $timeConflict = Observer::where('user_id', $observer->user_id)
                     ->whereHas('schedule', function ($query) use ($schedule) {
                         $query->where('schedule_exam_date', $schedule->schedule_exam_date)
                             ->where('schedule_time_slot', $schedule->schedule_time_slot);
-                    })->exists();
+                    })
+                    ->exists();
 
-                if ($conflict) {
+                if ($timeConflict) {
                     if ($isManual) {
                         Notification::make()
-                            ->title('خطأ')
-                            ->body('تعارض في الجدول الزمني')
+                            ->title('تعارض في التوقيت')
+                            ->body('لا يمكن للمراقب المراقبة في قاعتين بنفس اليوم والفترة')
                             ->danger()
                             ->send();
                     }
-
-                    return false;
+                    throw new \Exception('تعارض في التوقيت');
                 }
             }
-
         });
+    }
+
+    public function reservation()
+    {
+        return $this->belongsTo(Reservation::class, 'schedule_id', 'schedule_id')
+            ->where('room_id', $this->room_id);
     }
 }

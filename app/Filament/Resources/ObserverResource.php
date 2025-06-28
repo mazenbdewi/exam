@@ -5,9 +5,9 @@ namespace App\Filament\Resources;
 use App\Exports\ObserversExport;
 use App\Filament\Resources\ObserverResource\Pages;
 use App\Models\Observer;
+use App\Models\Reservation;
 use App\Models\Schedule;
 use App\Models\User;
-use App\Services\ObserverDistributionService;
 use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -31,39 +31,122 @@ class ObserverResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
+    // public static function form(Form $form): Form
+    // {
+    //     return $form->schema([
+    //         Forms\Components\Select::make('schedule_id')
+    //             ->label('المادة')
+    //             ->required()
+    //             ->searchable()
+    //             ->options(Schedule::query()->pluck('schedule_subject', 'schedule_id'))
+    //             ->live() // للتحديث الفوري
+    //             ->afterStateUpdated(function ($state, Forms\Set $set) {
+    //                 if ($state) {
+    //                     $schedule = Schedule::find($state);
+    //                     $set('schedule_exam_date', $schedule->schedule_exam_date);
+    //                     $set('schedule_time_slot', $schedule->schedule_time_slot);
+    //                     $set('room_id', null);
+    //                 }
+    //             }),
+
+    //         Forms\Components\TextInput::make('schedule_exam_date')
+    //             ->label('تاريخ الامتحان')
+    //             ->formatStateUsing(fn ($state) => Carbon::parse($state)->format('Y-m-d'))
+    //             ->disabled()
+    //             ->dehydrated()
+    //             ->visible(fn (Forms\Get $get) => $get('schedule_id')),
+
+    //         Forms\Components\TextInput::make('schedule_time_slot')
+    //             ->label('الفترة')
+    //             ->formatStateUsing(fn ($state) => $state == 'morning' ? 'صباحية' : 'مسائية')
+    //             ->disabled()
+    //             ->dehydrated()
+    //             ->visible(fn (Forms\Get $get) => $get('schedule_id')),
+
+    //         Forms\Components\Select::make('room_id')
+    //             ->label('القاعة')
+    //             ->required()
+    //             ->options(function (callable $get) {
+    //                 $schedule = Schedule::find($get('schedule_id'));
+
+    //                 return $schedule ? $schedule->rooms->pluck('room_name', 'room_id') : [];
+    //             })
+    //             ->visible(fn (callable $get) => $get('schedule_id')),
+
+    //         Forms\Components\Select::make('user_id')
+    //             ->label('المراقب')
+    //             ->options(User::whereHas('roles', fn ($q) => $q->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']))->pluck('name', 'id'))
+    //             ->required()
+    //             ->reactive()
+    //             ->searchable()
+    //             ->visible(fn () => auth()->user()->hasRole('super_admin'))
+    //             ->afterStateUpdated(function ($state, callable $set) {
+    //                 $user = User::find($state);
+    //                 if ($user && $user->max_observers > 0 && $user->observers()->count() >= $user->max_observers) {
+    //                     Notification::make()
+    //                         ->title('خطأ في التعيين')
+    //                         ->body("تجاوز الحد الأقصى ({$user->max_observers}) للمراقبات")
+    //                         ->danger()
+    //                         ->send();
+    //                     $set('user_id', null);
+    //                 }
+    //             }),
+
+    //         Forms\Components\Hidden::make('user_id')
+    //             ->default(auth()->id())
+    //             ->visible(fn () => ! auth()->user()->hasRole('super_admin')),
+    //     ]);
+    // }
     public static function form(Form $form): Form
     {
         return $form->schema([
             Forms\Components\Select::make('schedule_id')
                 ->label('المادة')
-                ->options(Schedule::all()->pluck('schedule_subject', 'schedule_id'))
                 ->required()
-                ->reactive()
                 ->searchable()
-                ->afterStateUpdated(function ($state, callable $set) {
-                    $schedule = Schedule::find($state);
-                    $set('schedule_exam_date', $schedule?->schedule_exam_date);
-                    $set('schedule_time_slot', $schedule?->schedule_time_slot);
+                ->options(Schedule::query()->pluck('schedule_subject', 'schedule_id'))
+                ->live()
+                ->afterStateUpdated(function ($state, Forms\Set $set) {
+                    if ($state) {
+                        $schedule = Schedule::find($state);
+                        $set('schedule_exam_date', $schedule->schedule_exam_date);
+                        $set('schedule_time_slot', $schedule->schedule_time_slot);
+                        $set('room_id', null);
+                    }
                 }),
 
-            Forms\Components\DatePicker::make('schedule_exam_date')
+            Forms\Components\TextInput::make('schedule_exam_date')
                 ->label('تاريخ الامتحان')
+                ->formatStateUsing(fn ($state) => Carbon::parse($state)->format('Y-m-d'))
                 ->disabled()
-                ->visible(fn (callable $get) => $get('schedule_id')),
+                ->dehydrated()
+                ->visible(fn (Forms\Get $get) => $get('schedule_id')),
 
             Forms\Components\Select::make('schedule_time_slot')
                 ->label('الفترة')
-                ->options(['morning' => 'صباحية', 'night' => 'مسائية'])
+                ->options([
+                    'morning' => 'صباحية',
+                    'night' => 'مسائية',
+                ])
                 ->disabled()
-                ->visible(fn (callable $get) => $get('schedule_id')),
+                ->dehydrated()
+                ->visible(fn (Forms\Get $get) => $get('schedule_id')),
 
             Forms\Components\Select::make('room_id')
                 ->label('القاعة')
                 ->required()
                 ->options(function (callable $get) {
-                    $schedule = Schedule::find($get('schedule_id'));
+                    $scheduleId = $get('schedule_id');
 
-                    return $schedule ? $schedule->rooms->pluck('room_name', 'room_id') : [];
+                    if (! $scheduleId) {
+                        return [];
+                    }
+
+                    return Reservation::where('schedule_id', $scheduleId)
+                        ->with('room')
+                        ->get()
+                        ->pluck('room.room_name', 'room_id')
+                        ->unique();
                 })
                 ->visible(fn (callable $get) => $get('schedule_id')),
 
@@ -158,8 +241,8 @@ class ObserverResource extends Resource
                     ->options(User::whereHas('roles', fn ($q) => $q->whereIn('name', ['مراقب', 'امين_سر', 'رئيس_قاعة']))->pluck('name', 'id')),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()->hidden(fn () => ! auth()->user()->hasRole('super_admin')),
+                Tables\Actions\EditAction::make()->hidden(fn () => ! auth()->user()->hasRole('super_admin')),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -167,12 +250,26 @@ class ObserverResource extends Resource
                 ]),
             ])
             ->headerActions([
+
                 Tables\Actions\Action::make('distribute')
                     ->label('توزيع تلقائي')
                     ->icon('heroicon-o-users')
                     ->color('primary')
                     ->hidden(fn () => ! auth()->user()->hasRole('super_admin'))
-                    ->action(fn () => ObserverDistributionService::distributeObservers()),
+                    ->action(function () {
+                        if (\App\Services\ObserverDistributionService::distributeObservers()) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('تم التوزيع بنجاح')
+                                ->success()
+                                ->send();
+                        } else {
+                            \Filament\Notifications\Notification::make()
+                                ->title('لم يتم تنفيذ أي توزيع، تأكد من وجود حجوزات قاعات أو تحقق من نقص المراقبين')
+                                ->danger()
+                                ->send();
+                        }
+                    })
+                    ->requiresConfirmation(),
 
                 Tables\Actions\Action::make('export')
                     ->label('تصدير Excel')
@@ -219,5 +316,10 @@ class ObserverResource extends Resource
     public static function getLabel(): ?string
     {
         return 'مراقبة';
+    }
+
+    public function update(User $user, Observer $observer)
+    {
+        return $user->hasRole('super_admin') || $observer->user_id === $user->id;
     }
 }

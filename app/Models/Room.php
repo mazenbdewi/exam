@@ -13,7 +13,7 @@ class Room extends Model
 
     protected $primaryKey = 'room_id';
 
-    protected $fillable = ['room_name', 'room_capacity_total', 'room_type'];
+    protected $fillable = ['room_name', 'room_capacity_total', 'room_type', 'room_priority'];
 
     const CREATED_AT = 'room_created_at';
 
@@ -142,5 +142,12 @@ class Room extends Model
                         });
                 });
         });
+    }
+
+    public function scheduledExams()
+    {
+        return $this->belongsToMany(Schedule::class, 'reservations', 'room_id', 'schedule_id')
+            ->using(ReservationPivot::class)
+            ->withPivot(['used_capacity', 'capacity_mode', 'date', 'time_slot']);
     }
 }

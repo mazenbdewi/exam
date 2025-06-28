@@ -23,33 +23,41 @@ class UsersImport implements ToModel, WithHeadingRow, WithValidation
             return null;
         }
 
-        // تعيين كلمة مرور مشفرة (من رقم الهاتف)
+        // تحويل نوع المراقب من العربية إلى الإنجليزية
+        $observerType = $this->translateObserverType($filteredRow['observer_type'] ?? 'أساسي');
+
+        // تحويل مستوى المراقبة إلى رقم
+        $monitoringLevel = $this->translateMonitoringLevel($filteredRow['monitoring_level'] ?? 'مراقبة كاملة');
+
+        // إنشاء المستخدم مع الحقول الجديدة
         $user = User::create([
             'name' => $filteredRow['name'],
-            'email' => $filteredRow['email'], // سيحتوي على رقم الهاتف
+            'email' => $filteredRow['email'], // رقم الهاتف
             'password' => Hash::make($filteredRow['email']), // استخدام رقم الهاتف ككلمة سر
-            'max_observers' => $filteredRow['max_observers'],
-            'month_part' => $filteredRow['month_part'] ?? 'both', // القيمة الافتراضية 'both'
+            'month_part' => $filteredRow['month_part'] ?? 'any', // القيمة الافتراضية 'any'
+            'observer_type' => $observerType,
+            'monitoring_level' => $monitoringLevel,
         ]);
 
         $user->syncRoles([]);
 
-        // ثم أعطه الدور المحدد من الإكسل فقط
+        // تعيين الدور المحدد من الإكسل
         if ($role = Role::where('name', $filteredRow['role'])->first()) {
             $user->assignRole($role);
-
-            return $user;
         }
+
+        return $user;
     }
 
     public function rules(): array
     {
         return [
             'name' => 'required|string',
-            'email' => 'required|regex:/^\+?[0-9]{7,15}$/', // تحقق من صيغة رقم الهاتف
+            'email' => 'required', // تحقق من صيغة رقم الهاتف
             'role' => 'required|string|exists:roles,name',
-            'max_observers' => 'required|integer',
-            'month_part' => 'sometimes|in:first_half,second_half,both,any', // تحقق من القيم المسموحة
+            'month_part' => 'sometimes|in:first_half,second_half,any',
+            'observer_type' => 'required|in:أساسي,ثانوي,احتياط,primary,secondary,reserve',
+            'monitoring_level' => 'required|in:0,1,2,3,لا يراقب,مراقبة كاملة,نصف مراقبة,ربع مراقبة',
         ];
     }
 
@@ -58,12 +66,45 @@ class UsersImport implements ToModel, WithHeadingRow, WithValidation
         return [
             'name.required' => 'حقل الاسم مطلوب',
             'email.required' => 'حقل رقم الهاتف مطلوب',
-            'email.regex' => 'يجب إدخال رقم هاتف صحيح (7-15 رقم)',
+            'email.regex' => 'يجب إدخال الرقم الوظني الصحيح',
             'role.required' => 'حقل الدور مطلوب',
             'role.exists' => 'الدور المحدد غير موجود',
-            'max_observers.required' => 'حقل عدد المراقبين مطلوب',
-            'max_observers.integer' => 'يجب أن يكون عدداً صحيحاً',
-            'month_part.in' => 'قيمة نصف الشهر غير صالحة (يجب أن تكون: first_half, second_half, both, any)',
+            'month_part.in' => 'قيمة نصف الشهر غير صالحة (يجب أن تكون: first_half, second_half, any)',
+            'observer_type.required' => 'نوع المراقب مطلوب',
+            'observer_type.in' => 'نوع المراقب غير صالح (القيم المسموحة: أساسي، ثانوي، احتياط)',
+            'monitoring_level.required' => 'مستوى المراقبة مطلوب',
+            'monitoring_level.in' => 'مستوى المراقبة غير صالح (القيم المسموحة: 0,1,2,3 أو: لا يراقب، مراقبة كاملة، نصف مراقبة، ربع مراقبة)',
         ];
+    }
+
+    /**
+     * تحويل نوع المراقب من العربية إلى الإنجليزية
+     */
+    private function translateObserverType(string $type): string
+    {
+        return match (trim($type)) {
+            'أساسي', 'primary' => 'primary',
+            'ثانوي', 'secondary' => 'secondary',
+            'احتياط', 'reserve' => 'reserve',
+            default => 'primary'
+        };
+    }
+
+    /**
+     * تحويل مستوى المراقبة إلى رقم
+     */
+    private function translateMonitoringLevel($level): int
+    {
+        if (is_numeric($level)) {
+            return (int) $level;
+        }
+
+        return match (trim($level)) {
+            'مراقبة كاملة', 'كاملة' => 1,
+            'نصف مراقبة', 'نصف' => 2,
+            'ربع مراقبة', 'ربع' => 3,
+            'لا يراقب', 'لا' => 0,
+            default => 1
+        };
     }
 }
