@@ -11,7 +11,7 @@ class StaffStatsWidget extends StatsOverviewWidget
 {
     protected function getColumns(): int
     {
-        return 3; // 3 كروت في كل صف
+        return 3;
     }
 
     protected function getCards(): array
@@ -76,8 +76,13 @@ class StaffStatsWidget extends StatsOverviewWidget
             'ربع مراقبة' => User::where('monitoring_level', 3)->count(),
         ];
 
-        return [
+        $monthPartStats = [
+            'first_half' => User::where('month_part', 'first_half')->count(),
+            'second_half' => User::where('month_part', 'second_half')->count(),
+            'any' => User::where('month_part', 'any')->count(),
+        ];
 
+        return [
             Card::make('عدد رؤساء القاعات الكلي', $totalStaff['رئيس_قاعة'])->color('primary')->icon('heroicon-o-user-group'),
             Card::make('عدد أمناء السر الكلي', $totalStaff['امين_سر'])->color('primary')->icon('heroicon-o-user-group'),
             Card::make('عدد المراقبين الكلي', $totalStaff['مراقب'])->color('primary')->icon('heroicon-o-user-group'),
@@ -86,10 +91,27 @@ class StaffStatsWidget extends StatsOverviewWidget
             Card::make('المراقبون الثانويون', $secondaryObservers)->color('warning')->icon('heroicon-o-adjustments-horizontal'),
             Card::make('المراقبون الاحتياط', $reserveObservers)->color('danger')->icon('heroicon-o-clock'),
 
+            Card::make('متاحون في النصف الأول', $monthPartStats['first_half'])
+                ->description('من 1 إلى 15 من الشهر')
+                ->color('sky')
+                ->icon('heroicon-o-calendar-days'),
+
+            Card::make('متاحون في النصف الثاني', $monthPartStats['second_half'])
+                ->description('من 16 إلى نهاية الشهر')
+                ->color('indigo')
+                ->icon('heroicon-o-calendar-days'),
+
+            Card::make('متاحون في أي وقت', $monthPartStats['any'])
+                ->description('طوال الشهر')
+                ->color('violet')
+                ->icon('heroicon-o-calendar-days'),
+
             Card::make('لا يراقب', $monitoringLevels['لا يراقب'])->color('gray')->icon('heroicon-o-x-circle'),
             Card::make('مراقبة كاملة', $monitoringLevels['مراقبة كاملة'])->color('success')->icon('heroicon-o-eye'),
             Card::make('نصف مراقبة', $monitoringLevels['نصف مراقبة'])->color('warning')->icon('heroicon-o-eye'),
-            Card::make('ربع مراقبة', $monitoringLevels['ربع مراقبة'])->color('danger')->icon('heroicon-o-eye'),
+            Card::make('ربع مراقبة', $monitoringLevels['ربع مراقبة'])
+                ->color('danger')
+                ->icon('heroicon-o-eye'),
         ];
     }
 }
