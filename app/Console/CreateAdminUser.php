@@ -8,15 +8,37 @@ use Spatie\Permission\Models\Role;
 
 class CreateAdminUser extends Command
 {
-    protected $signature = 'make:admin';
+    protected $signature = 'make:admin {userId? : ID of an existing user to assign a role to}';
 
-    protected $description = 'Create the first admin user and assign super_admin role';
+    protected $description = 'Create admin user or assign role to an existing user';
 
     public function handle(): int
     {
-        // Check if a super_admin already exists
+        // If userId is provided, assign role to existing user
+        $userId = $this->argument('userId');
+
+        if ($userId) {
+            $user = User::findOrFail($userId);
+
+            // Ensure role exists
+            $roleName = $this->choice('Select role to assign', ['super_admin', 'admin', 'editor'], 0);
+
+            Role::firstOrCreate([
+                'name' => $roleName,
+                'guard_name' => 'web',
+            ]);
+
+            $user->assignRole($roleName);
+
+            $this->info("✅ Role '{$roleName}' assigned successfully to user #{$user->id} ({$user->email}).");
+
+            return self::SUCCESS;
+        }
+
+        // Otherwise, create the first super_admin user (one-time)
         if (User::role('super_admin')->exists()) {
-            $this->warn('⚠️ A super_admin user already exists. This command can only be run once.');
+            $this->warn('⚠️ A super_admin user already exists. This command can only be run once without userId.');
+            $this->line('Tip: You can assign roles to existing users by running: php artisan make:admin {userId}');
 
             return self::FAILURE;
         }
@@ -40,16 +62,16 @@ class CreateAdminUser extends Command
             'password' => bcrypt($password),
         ]);
 
-        // Create the role if it doesn't exist
-        $role = Role::firstOrCreate([
+        // Ensure role exists
+        Role::firstOrCreate([
             'name' => 'super_admin',
             'guard_name' => 'web',
         ]);
 
-        // Assign the role
-        $user->assignRole($role);
+        // Assign role by name (simpler)
+        $user->assignRole('super_admin');
 
-        $this->info('✅ Admin user created and assigned the super_admin role successfully.');
+        $this->info("✅ Admin user created (ID: {$user->id}) and assigned the 'super_admin' role successfully.");
 
         return self::SUCCESS;
     }

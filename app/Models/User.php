@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use BezhanSalleh\FilamentShield\Traits\HasPanelShield;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -59,7 +59,7 @@ class User extends Authenticatable
 
     public function delete()
     {
-        if ($this->email == 'admin@admin.com') {
+        if ($this->email === 'admin@admin.com') {
             throw new \Exception('لا يمكن حذف مستخدم محمي.');
         }
 
@@ -68,54 +68,23 @@ class User extends Authenticatable
 
     public function schedules()
     {
-        return $this->belongsToMany(Schedule::class, 'schedule_user', 'user_id', 'schedule_id')->withTimestamps('schedule_user_created_at', 'schedule_user_updated_at');
+        return $this->belongsToMany(
+            Schedule::class,
+            'schedule_user',
+            'user_id',
+            'schedule_id'
+        )->withTimestamps();
     }
 
-    public function roles()
-    {
-        return $this->belongsToMany(Role::class, 'model_has_roles', 'model_id', 'role_id');
-    }
-
+    /**
+     * مهم جداً:
+     * لا تضع هنا دالة roles() يدوياً.
+     * HasRoles من Spatie يعرّفها كـ morphToMany وتقوم بتعبئة model_type تلقائياً.
+     */
     public function observers()
     {
         return $this->hasMany(Observer::class);
     }
-
-    // public function canTakeMoreObservers(): bool
-    // {
-    //     // حساب العبء بناءً على مستوى المراقبة
-    //     $monitoringLoad = $this->observers->sum(function ($observer) {
-    //         return match ($observer->monitoring_level) {
-    //             1 => 1.0,
-    //             2 => 0.5,
-    //             3 => 0.25,
-    //             default => 0
-    //         };
-    //     });
-
-    //     // الحد الأقصى للعبء (مثال: 2.0 يعني 2 مهمة كاملة)
-    //     $maxLoad = $this->max_observers ?? 2.0;
-
-    //     return $monitoringLoad < $maxLoad;
-    // }
-    // في app/Models/User.php
-    // public function canTakeMoreObservers(): bool
-    // {
-    //     // حساب العبء الحالي
-    //     $currentLoad = $this->observers->sum(function ($observer) {
-    //         return match ($observer->monitoring_level) {
-    //             1 => 1.0,
-    //             2 => 0.5,
-    //             3 => 0.25,
-    //             default => 0
-    //         };
-    //     });
-
-    //     // الحد الأقصى (مثال: 2.0 يعني مهمتين كاملتين)
-    //     $maxLoad = $this->max_observers ?? 2.0;
-
-    //     return $currentLoad < $maxLoad;
-    // }
 
     public function canTakeMoreObservers(): bool
     {
